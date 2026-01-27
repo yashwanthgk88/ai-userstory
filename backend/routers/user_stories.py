@@ -72,7 +72,7 @@ async def import_from_jira(project_id: UUID, req: JiraImportRequest, user: User 
     await _verify_project(project_id, user, db)
     auth = b64encode(f"{req.email}:{req.api_token}".encode()).decode()
     headers = {"Authorization": f"Basic {auth}", "Accept": "application/json"}
-    jql = req.jql or f"project = {req.project_key} ORDER BY created DESC"
+    jql = req.jql or f"project = {req.project_key} AND type = Story ORDER BY created DESC"
     from urllib.parse import urlparse
     parsed = urlparse(req.jira_url)
     base_url = f"{parsed.scheme}://{parsed.netloc}"
