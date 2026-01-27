@@ -73,28 +73,42 @@ async def import_from_jira(project_id: UUID, req: JiraImportRequest, user: User 
     auth = b64encode(f"{req.email}:{req.api_token}".encode()).decode()
     headers = {"Authorization": f"Basic {auth}", "Accept": "application/json"}
     jql = req.jql or f"project = {req.project_key} ORDER BY created DESC"
-    # Normalize Jira URL to base domain (strip paths like /jira/for-you)
-    from urllib.parse import urlparse, quote
+    from urllib.parse import urlparse
     parsed = urlparse(req.jira_url)
     base_url = f"{parsed.scheme}://{parsed.netloc}"
-    encoded_jql = quote(jql)
 
     async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-        # Try API v3 first, fall back to v2
+        # Use new /search/jql POST endpoint (Jira Cloud 2024+), fall back to legacy GET
         data = None
-        for api_ver in ["3", "2"]:
-            url = f"{base_url}/rest/api/{api_ver}/search?jql={encoded_jql}&maxResults=50"
-            resp = await client.get(url, headers=headers)
-            if resp.status_code == 200:
-                try:
-                    data = resp.json()
-                    break
-                except Exception:
-                    continue
-            if resp.status_code == 401:
-                raise HTTPException(status_code=401, detail="Jira authentication failed. Check your email and API token.")
-            if resp.status_code == 403:
-                raise HTTPException(status_code=403, detail="Jira access denied. Check your permissions for this project.")
+        headers_json = {**headers, "Content-Type": "application/json"}
+
+        # Try new POST /rest/api/3/search/jql first
+        url = f"{base_url}/rest/api/3/search/jql"
+        resp = await client.post(url, json={"jql": jql, "maxResults": 50}, headers=headers_json)
+        if resp.status_code == 200:
+            try:
+                data = resp.json()
+            except Exception:
+                pass
+
+        # Fall back to legacy GET /rest/api/3/search and /rest/api/2/search
+        if data is None and resp.status_code in (404, 410):
+            from urllib.parse import quote
+            encoded_jql = quote(jql)
+            for api_ver in ["3", "2"]:
+                url = f"{base_url}/rest/api/{api_ver}/search?jql={encoded_jql}&maxResults=50"
+                resp = await client.get(url, headers=headers)
+                if resp.status_code == 200:
+                    try:
+                        data = resp.json()
+                        break
+                    except Exception:
+                        continue
+
+        if resp.status_code == 401:
+            raise HTTPException(status_code=401, detail="Jira authentication failed. Check your email and API token.")
+        if resp.status_code == 403:
+            raise HTTPException(status_code=403, detail="Jira access denied. Check your permissions for this project.")
 
         if data is None:
             detail = f"Jira returned error {resp.status_code}"
