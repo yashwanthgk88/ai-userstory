@@ -73,12 +73,19 @@ async def import_from_jira(project_id: UUID, req: JiraImportRequest, user: User 
     auth = b64encode(f"{req.email}:{req.api_token}".encode()).decode()
     headers = {"Authorization": f"Basic {auth}", "Accept": "application/json"}
     jql = req.jql or f"project = {req.project_key} AND issuetype = Story ORDER BY created DESC"
-    url = f"{req.jira_url.rstrip('/')}/rest/api/3/search?jql={jql}&maxResults=50"
+    # Normalize Jira URL to base domain (strip paths like /jira/for-you)
+    from urllib.parse import urlparse
+    parsed = urlparse(req.jira_url)
+    base_url = f"{parsed.scheme}://{parsed.netloc}"
+    url = f"{base_url}/rest/api/3/search?jql={jql}&maxResults=50"
 
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.get(url, headers=headers)
         resp.raise_for_status()
-        data = resp.json()
+        try:
+            data = resp.json()
+        except Exception:
+            raise HTTPException(status_code=502, detail="Jira returned invalid response. Check your Jira URL and credentials.")
 
     stories = []
     for issue in data.get("issues", []):
