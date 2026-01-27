@@ -72,27 +72,39 @@ async def import_from_jira(project_id: UUID, req: JiraImportRequest, user: User 
     await _verify_project(project_id, user, db)
     auth = b64encode(f"{req.email}:{req.api_token}".encode()).decode()
     headers = {"Authorization": f"Basic {auth}", "Accept": "application/json"}
-    jql = req.jql or f"project = {req.project_key} AND issuetype = Story ORDER BY created DESC"
+    jql = req.jql or f"project = {req.project_key} ORDER BY created DESC"
     # Normalize Jira URL to base domain (strip paths like /jira/for-you)
-    from urllib.parse import urlparse
+    from urllib.parse import urlparse, quote
     parsed = urlparse(req.jira_url)
     base_url = f"{parsed.scheme}://{parsed.netloc}"
-    url = f"{base_url}/rest/api/3/search?jql={jql}&maxResults=50"
+    encoded_jql = quote(jql)
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(url, headers=headers)
-        if resp.status_code == 401:
-            raise HTTPException(status_code=401, detail="Jira authentication failed. Check your email and API token.")
-        if resp.status_code == 403:
-            raise HTTPException(status_code=403, detail="Jira access denied. Check your permissions for this project.")
-        if resp.status_code in (404, 410):
-            raise HTTPException(status_code=404, detail=f"Jira project '{req.project_key}' not found or has been deleted. Verify the project key exists.")
-        if resp.status_code >= 400:
-            raise HTTPException(status_code=502, detail=f"Jira returned error {resp.status_code}: {resp.text[:200]}")
-        try:
-            data = resp.json()
-        except Exception:
-            raise HTTPException(status_code=502, detail="Jira returned invalid response. Check your Jira URL and credentials.")
+    async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+        # Try API v3 first, fall back to v2
+        data = None
+        for api_ver in ["3", "2"]:
+            url = f"{base_url}/rest/api/{api_ver}/search?jql={encoded_jql}&maxResults=50"
+            resp = await client.get(url, headers=headers)
+            if resp.status_code == 200:
+                try:
+                    data = resp.json()
+                    break
+                except Exception:
+                    continue
+            if resp.status_code == 401:
+                raise HTTPException(status_code=401, detail="Jira authentication failed. Check your email and API token.")
+            if resp.status_code == 403:
+                raise HTTPException(status_code=403, detail="Jira access denied. Check your permissions for this project.")
+
+        if data is None:
+            detail = f"Jira returned error {resp.status_code}"
+            try:
+                err_data = resp.json()
+                if "errorMessages" in err_data:
+                    detail = "; ".join(err_data["errorMessages"])
+            except Exception:
+                detail += f": {resp.text[:200]}"
+            raise HTTPException(status_code=502, detail=f"Jira import failed: {detail}")
 
     stories = []
     for issue in data.get("issues", []):
