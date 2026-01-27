@@ -1,0 +1,15 @@
+[
+  {"id": "ITGC-AC-1", "title": "User Access Provisioning", "category": "Access Control"},
+  {"id": "ITGC-AC-2", "title": "User Access Review", "category": "Access Control"},
+  {"id": "ITGC-AC-3", "title": "Privileged Access Management", "category": "Access Control"},
+  {"id": "ITGC-DP-1", "title": "Data Backup and Recovery", "category": "Data Protection"},
+  {"id": "ITGC-DP-2", "title": "Data Classification and Handling", "category": "Data Protection"},
+  {"id": "ITGC-AL-1", "title": "System Activity Logging", "category": "Audit Logging"},
+  {"id": "ITGC-AL-2", "title": "Log Review and Monitoring", "category": "Audit Logging"},
+  {"id": "ITGC-FC-1", "title": "Transaction Authorization", "category": "Financial Controls"},
+  {"id": "ITGC-FC-2", "title": "Segregation of Duties", "category": "Financial Controls"},
+  {"id": "ITGC-CM-1", "title": "Change Management Process", "category": "Change Management"},
+  {"id": "ITGC-CM-2", "title": "Change Approval and Testing", "category": "Change Management"},
+  {"id": "ITGC-SA-1", "title": "System Development Lifecycle", "category": "System Acquisition"},
+  {"id": "ITGC-SA-2", "title": "Vendor Risk Management", "category": "System Acquisition"}
+]

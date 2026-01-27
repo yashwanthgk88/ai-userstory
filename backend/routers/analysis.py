@@ -1,0 +1,115 @@
+import logging
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from database import get_db
+from models.user import User
+from models.project import Project
+from models.user_story import UserStory
+from models.analysis import SecurityAnalysis
+from models.custom_standard import CustomStandard
+from models.compliance_mapping import ComplianceMapping
+from schemas.analysis import AnalysisResponse, AnalysisSummary
+from core.security import get_current_user
+from services.ai_analyzer import analyze_with_claude
+from services.template_analyzer import analyze_with_templates
+from services.compliance_mapper import map_requirements_to_standards
+
+logger = logging.getLogger(__name__)
+router = APIRouter(tags=["analysis"])
+
+
+@router.post("/stories/{story_id}/analyze", response_model=AnalysisResponse)
+async def run_analysis(story_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(UserStory).where(UserStory.id == story_id))
+    story = result.scalar_one_or_none()
+    if not story:
+        raise HTTPException(status_code=404, detail="Story not found")
+
+    # Verify ownership
+    proj = await db.execute(select(Project).where(Project.id == story.project_id, Project.owner_id == user.id))
+    if not proj.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Load custom standards for this project
+    cs_result = await db.execute(select(CustomStandard).where(CustomStandard.project_id == story.project_id))
+    custom_stds = cs_result.scalars().all()
+    custom_std_data = [{"name": cs.name, "controls": cs.controls} for cs in custom_stds] if custom_stds else None
+
+    # Determine next version
+    max_version = (await db.execute(
+        select(func.max(SecurityAnalysis.version)).where(SecurityAnalysis.user_story_id == story_id)
+    )).scalar() or 0
+    next_version = max_version + 1
+
+    # Try Claude API, fall back to templates
+    ai_model = None
+    try:
+        analysis_data = await analyze_with_claude(
+            story.title, story.description, story.acceptance_criteria, custom_std_data
+        )
+        ai_model = "claude-sonnet-4-20250514"
+    except Exception as e:
+        logger.warning("Claude API failed, falling back to templates: %s", e)
+        analysis_data = analyze_with_templates(story.title, story.description, story.acceptance_criteria)
+        ai_model = "template-fallback"
+
+    analysis = SecurityAnalysis(
+        user_story_id=story_id,
+        version=next_version,
+        abuse_cases=analysis_data.get("abuse_cases", []),
+        stride_threats=analysis_data.get("stride_threats", []),
+        security_requirements=analysis_data.get("security_requirements", []),
+        risk_score=analysis_data.get("risk_score", 0),
+        ai_model_used=ai_model,
+    )
+    db.add(analysis)
+    await db.flush()
+
+    # Generate compliance mappings
+    mappings = map_requirements_to_standards(
+        analysis_data.get("security_requirements", []),
+        custom_standards=custom_std_data,
+    )
+    for m in mappings:
+        db.add(ComplianceMapping(
+            analysis_id=analysis.id,
+            requirement_id=m["requirement_id"],
+            standard_name=m["standard_name"],
+            control_id=m["control_id"],
+            control_title=m.get("control_title"),
+            relevance_score=m.get("relevance_score", 0.0),
+        ))
+
+    await db.commit()
+    await db.refresh(analysis)
+    return analysis
+
+
+@router.get("/stories/{story_id}/analyses", response_model=list[AnalysisSummary])
+async def list_analyses(story_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(SecurityAnalysis).where(SecurityAnalysis.user_story_id == story_id).order_by(SecurityAnalysis.version.desc())
+    )
+    analyses = result.scalars().all()
+    return [
+        AnalysisSummary(
+            id=a.id, version=a.version, risk_score=a.risk_score,
+            abuse_case_count=len(a.abuse_cases) if isinstance(a.abuse_cases, list) else 0,
+            requirement_count=len(a.security_requirements) if isinstance(a.security_requirements, list) else 0,
+            ai_model_used=a.ai_model_used, created_at=a.created_at,
+        )
+        for a in analyses
+    ]
+
+
+@router.get("/analyses/{analysis_id}", response_model=AnalysisResponse)
+async def get_analysis(analysis_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(SecurityAnalysis).where(SecurityAnalysis.id == analysis_id))
+    analysis = result.scalar_one_or_none()
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+    return analysis

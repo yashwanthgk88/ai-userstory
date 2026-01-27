@@ -1,0 +1,15 @@
+[
+  {"id": "Req 1.1", "title": "Install and maintain network security controls", "category": "Network"},
+  {"id": "Req 2.1", "title": "Apply secure configurations", "category": "Configuration"},
+  {"id": "Req 3.1", "title": "Protect stored account data", "category": "Data Protection"},
+  {"id": "Req 3.2", "title": "Do not store sensitive authentication data after authorization", "category": "Data Protection"},
+  {"id": "Req 4.1", "title": "Protect cardholder data with strong cryptography during transmission", "category": "Encryption"},
+  {"id": "Req 6.1", "title": "Develop and maintain secure systems and software", "category": "Development"},
+  {"id": "Req 6.2", "title": "Protect custom software from vulnerabilities", "category": "Development"},
+  {"id": "Req 7.1", "title": "Restrict access to system components by business need to know", "category": "Access Control"},
+  {"id": "Req 8.1", "title": "Identify and authenticate access to system components", "category": "Authentication"},
+  {"id": "Req 8.3", "title": "Secure all individual authentication factors", "category": "Authentication"},
+  {"id": "Req 10.1", "title": "Log and monitor all access to system components and cardholder data", "category": "Logging"},
+  {"id": "Req 10.2", "title": "Detect anomalies and suspicious activity", "category": "Logging"},
+  {"id": "Req 12.1", "title": "Maintain an information security policy", "category": "Policy"}
+]

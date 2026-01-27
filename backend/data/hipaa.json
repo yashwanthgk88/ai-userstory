@@ -1,0 +1,14 @@
+[
+  {"id": "164.308(a)(1)", "title": "Security Management Process", "category": "Administrative"},
+  {"id": "164.308(a)(3)", "title": "Workforce Security", "category": "Administrative"},
+  {"id": "164.308(a)(4)", "title": "Information Access Management", "category": "Administrative"},
+  {"id": "164.308(a)(5)", "title": "Security Awareness and Training", "category": "Administrative"},
+  {"id": "164.312(a)", "title": "Access Control", "category": "Technical"},
+  {"id": "164.312(a)(2)(iv)", "title": "Encryption and Decryption", "category": "Technical"},
+  {"id": "164.312(b)", "title": "Audit Controls", "category": "Technical"},
+  {"id": "164.312(c)", "title": "Integrity", "category": "Technical"},
+  {"id": "164.312(d)", "title": "Person or Entity Authentication", "category": "Technical"},
+  {"id": "164.312(e)", "title": "Transmission Security", "category": "Technical"},
+  {"id": "164.316(a)", "title": "Policies and Procedures", "category": "Documentation"},
+  {"id": "164.316(b)", "title": "Documentation", "category": "Documentation"}
+]

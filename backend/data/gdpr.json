@@ -1,0 +1,9 @@
+[
+  {"id": "Art 5", "title": "Principles relating to processing of personal data", "category": "Principles"},
+  {"id": "Art 25", "title": "Data protection by design and by default", "category": "Design"},
+  {"id": "Art 30", "title": "Records of processing activities", "category": "Records"},
+  {"id": "Art 32", "title": "Security of processing", "category": "Security"},
+  {"id": "Art 33", "title": "Notification of a personal data breach to supervisory authority", "category": "Breach"},
+  {"id": "Art 35", "title": "Data protection impact assessment", "category": "Assessment"},
+  {"id": "Art 37", "title": "Designation of the data protection officer", "category": "Governance"}
+]

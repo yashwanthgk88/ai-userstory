@@ -1,0 +1,16 @@
+[
+  {"id": "A.9.1", "title": "Business requirements of access control", "category": "Access Control"},
+  {"id": "A.9.2", "title": "User access management", "category": "Access Control"},
+  {"id": "A.9.3", "title": "User responsibilities", "category": "Access Control"},
+  {"id": "A.9.4", "title": "System and application access control", "category": "Access Control"},
+  {"id": "A.10.1", "title": "Cryptographic controls", "category": "Cryptography"},
+  {"id": "A.12.1", "title": "Operational procedures and responsibilities", "category": "Operations Security"},
+  {"id": "A.12.4", "title": "Logging and monitoring", "category": "Operations Security"},
+  {"id": "A.12.6", "title": "Technical vulnerability management", "category": "Operations Security"},
+  {"id": "A.13.1", "title": "Network security management", "category": "Communications Security"},
+  {"id": "A.13.2", "title": "Information transfer", "category": "Communications Security"},
+  {"id": "A.14.1", "title": "Security requirements of information systems", "category": "System Development"},
+  {"id": "A.14.2", "title": "Security in development and support processes", "category": "System Development"},
+  {"id": "A.18.1", "title": "Compliance with legal and contractual requirements", "category": "Compliance"},
+  {"id": "A.18.2", "title": "Information security reviews", "category": "Compliance"}
+]
