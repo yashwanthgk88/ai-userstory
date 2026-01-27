@@ -81,7 +81,14 @@ async def import_from_jira(project_id: UUID, req: JiraImportRequest, user: User 
 
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.get(url, headers=headers)
-        resp.raise_for_status()
+        if resp.status_code == 401:
+            raise HTTPException(status_code=401, detail="Jira authentication failed. Check your email and API token.")
+        if resp.status_code == 403:
+            raise HTTPException(status_code=403, detail="Jira access denied. Check your permissions for this project.")
+        if resp.status_code in (404, 410):
+            raise HTTPException(status_code=404, detail=f"Jira project '{req.project_key}' not found or has been deleted. Verify the project key exists.")
+        if resp.status_code >= 400:
+            raise HTTPException(status_code=502, detail=f"Jira returned error {resp.status_code}: {resp.text[:200]}")
         try:
             data = resp.json()
         except Exception:
