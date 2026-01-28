@@ -1,6 +1,6 @@
 import { Outlet, Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../stores/authStore'
-import { Shield, LogOut, FolderOpen, Cpu, Settings } from 'lucide-react'
+import { Shield, LogOut, FolderOpen, Cpu, Settings, FileText } from 'lucide-react'
 
 export default function AppShell() {
   const { user, logout } = useAuthStore()
@@ -24,6 +24,9 @@ export default function AppShell() {
             </Link>
             <Link to="/settings" className="flex items-center gap-2 text-sm text-gray-300 hover:text-white">
               <Settings className="w-4 h-4" /> Settings
+            </Link>
+            <Link to="/api-docs" className="flex items-center gap-2 text-sm text-gray-300 hover:text-white">
+              <FileText className="w-4 h-4" /> API Docs
             </Link>
             <div className="flex items-center gap-2 bg-green-500/20 border border-green-500/30 px-3 py-1.5 rounded-full">
               <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />

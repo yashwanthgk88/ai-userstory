@@ -8,7 +8,14 @@ from routers import auth, projects, user_stories, analysis, compliance, custom_s
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
-app = FastAPI(title="SecureReq AI", version="1.0.0", description="AI-Powered Security Requirements Generator")
+app = FastAPI(
+    title="SecureReq AI",
+    version="1.0.0",
+    description="AI-Powered Security Requirements Generator",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
+)
 
 app.add_middleware(
     CORSMiddleware,

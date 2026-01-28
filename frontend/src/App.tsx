@@ -11,6 +11,7 @@ import CustomStandardsPage from './pages/CustomStandardsPage'
 import HistoryPage from './pages/HistoryPage'
 import AIConsolePage from './pages/AIConsolePage'
 import SettingsPage from './pages/SettingsPage'
+import APIDocsPage from './pages/APIDocsPage'
 import AppShell from './components/layout/AppShell'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -40,6 +41,7 @@ export default function App() {
         <Route path="projects/:projectId/history" element={<HistoryPage />} />
         <Route path="ai-console" element={<AIConsolePage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="api-docs" element={<APIDocsPage />} />
       </Route>
     </Routes>
   )
