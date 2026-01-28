@@ -1,12 +1,37 @@
 import logging
+import subprocess
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 
 from config import settings
 from routers import auth, projects, user_stories, analysis, compliance, custom_standards, export, integrations, ai_console, api_keys, webhooks
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Run database migrations on startup
+    logger.info("Running database migrations...")
+    try:
+        result = subprocess.run(
+            ["alembic", "upgrade", "head"],
+            capture_output=True,
+            text=True,
+            cwd="/app"  # Railway working directory
+        )
+        if result.returncode == 0:
+            logger.info("Migrations completed successfully")
+        else:
+            logger.warning("Migration output: %s", result.stdout)
+            if result.stderr:
+                logger.warning("Migration stderr: %s", result.stderr)
+    except Exception as e:
+        logger.warning("Could not run migrations: %s", e)
+    yield
 
 app = FastAPI(
     title="SecureReq AI",
@@ -15,6 +40,7 @@ app = FastAPI(
     docs_url="/api/docs",
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json",
+    lifespan=lifespan,
 )
 
 app.add_middleware(

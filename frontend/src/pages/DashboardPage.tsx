@@ -47,10 +47,11 @@ export default function DashboardPage() {
   const jiraIntegration: Integration | undefined = globalIntegrations.find((i: Integration) => i.integration_type === 'jira')
 
   // Fetch Jira projects if we have a Jira integration
-  const { data: jiraProjects = [], isLoading: loadingJiraProjects } = useQuery<JiraProject[]>({
+  const { data: jiraProjects = [], isLoading: loadingJiraProjects, error: jiraProjectsError } = useQuery<JiraProject[]>({
     queryKey: ['jira-projects', jiraIntegration?.id],
     queryFn: () => api.get(`/integrations/${jiraIntegration!.id}/jira/projects`).then(r => r.data),
     enabled: !!jiraIntegration,
+    retry: 1,
   })
 
   // Check which Jira projects already have a local space
@@ -194,7 +195,7 @@ export default function DashboardPage() {
       )}
 
       {/* Jira Projects Section */}
-      {jiraIntegration && unlinkedJiraProjects.length > 0 && (
+      {jiraIntegration && (
         <div className="mb-8">
           <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
             <ExternalLink className="w-5 h-5 text-blue-400" />
@@ -203,6 +204,19 @@ export default function DashboardPage() {
           </h2>
           {loadingJiraProjects ? (
             <div className="text-center py-8 text-gray-400">Loading Jira projects...</div>
+          ) : jiraProjectsError ? (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 text-red-400">
+              <p className="font-medium">Failed to load Jira projects</p>
+              <p className="text-sm mt-1">{(jiraProjectsError as any)?.response?.data?.detail || (jiraProjectsError as Error)?.message || 'Unknown error'}</p>
+              <button
+                onClick={() => queryClient.invalidateQueries({ queryKey: ['jira-projects'] })}
+                className="mt-2 text-sm underline hover:no-underline"
+              >
+                Try again
+              </button>
+            </div>
+          ) : unlinkedJiraProjects.length === 0 ? (
+            <div className="text-center py-8 text-gray-400">All Jira projects have been imported</div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {unlinkedJiraProjects.map((project) => (
