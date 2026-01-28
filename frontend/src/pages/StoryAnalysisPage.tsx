@@ -274,7 +274,7 @@ export default function StoryAnalysisPage() {
                     Publish Results to {sourceLabel}
                   </h3>
                   <p className="text-sm text-gray-400 mt-1">
-                    Post analysis results as a comment on {story?.external_id}
+                    Update {story?.external_id} with abuse cases, security requirements & risk score
                   </p>
                 </div>
                 <button
