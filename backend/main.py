@@ -17,18 +17,20 @@ async def lifespan(app: FastAPI):
     # Run database migrations on startup
     logger.info("Running database migrations...")
     try:
+        # Try running alembic from current directory first
         result = subprocess.run(
             ["alembic", "upgrade", "head"],
             capture_output=True,
             text=True,
-            cwd="/app"  # Railway working directory
         )
         if result.returncode == 0:
             logger.info("Migrations completed successfully")
+            if result.stdout:
+                logger.info("Migration output: %s", result.stdout)
         else:
-            logger.warning("Migration output: %s", result.stdout)
-            if result.stderr:
-                logger.warning("Migration stderr: %s", result.stderr)
+            logger.error("Migration failed with code %d", result.returncode)
+            logger.error("stdout: %s", result.stdout)
+            logger.error("stderr: %s", result.stderr)
     except Exception as e:
         logger.warning("Could not run migrations: %s", e)
     yield
