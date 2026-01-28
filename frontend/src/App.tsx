@@ -9,6 +9,7 @@ import StoryAnalysisPage from './pages/StoryAnalysisPage'
 import CompliancePage from './pages/CompliancePage'
 import CustomStandardsPage from './pages/CustomStandardsPage'
 import HistoryPage from './pages/HistoryPage'
+import AIConsolePage from './pages/AIConsolePage'
 import AppShell from './components/layout/AppShell'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="projects/:projectId/compliance/:analysisId" element={<CompliancePage />} />
         <Route path="projects/:projectId/standards" element={<CustomStandardsPage />} />
         <Route path="projects/:projectId/history" element={<HistoryPage />} />
+        <Route path="ai-console" element={<AIConsolePage />} />
       </Route>
     </Routes>
   )

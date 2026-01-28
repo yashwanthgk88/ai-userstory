@@ -1,6 +1,6 @@
 import { Outlet, Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../stores/authStore'
-import { Shield, LogOut, FolderOpen } from 'lucide-react'
+import { Shield, LogOut, FolderOpen, Cpu } from 'lucide-react'
 
 export default function AppShell() {
   const { user, logout } = useAuthStore()
@@ -18,6 +18,9 @@ export default function AppShell() {
           <div className="flex items-center gap-4">
             <Link to="/" className="flex items-center gap-2 text-sm text-gray-300 hover:text-white">
               <FolderOpen className="w-4 h-4" /> Projects
+            </Link>
+            <Link to="/ai-console" className="flex items-center gap-2 text-sm text-gray-300 hover:text-white">
+              <Cpu className="w-4 h-4" /> AI Console
             </Link>
             <div className="flex items-center gap-2 bg-green-500/20 border border-green-500/30 px-3 py-1.5 rounded-full">
               <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />

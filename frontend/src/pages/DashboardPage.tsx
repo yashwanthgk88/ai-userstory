@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../api/client'
-import { FolderOpen, Plus, Shield, FileText, BarChart3 } from 'lucide-react'
+import { FolderOpen, Plus, Shield, FileText, BarChart3, Trash2 } from 'lucide-react'
 
 export default function DashboardPage() {
   const queryClient = useQueryClient()
@@ -24,6 +24,18 @@ export default function DashboardPage() {
       setDesc('')
     },
   })
+
+  const handleDelete = async (id: string, e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!confirm('Delete this project and all its stories and analyses?')) return
+    try {
+      await api.delete(`/projects/${id}`)
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Delete failed')
+    }
+  }
 
   return (
     <div>
@@ -62,17 +74,26 @@ export default function DashboardPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {projects.map((p: any) => (
-            <Link key={p.id} to={`/projects/${p.id}`} className="bg-white/5 border border-white/10 rounded-2xl p-5 hover:bg-white/10 transition-colors group">
-              <div className="flex items-center gap-3 mb-3">
-                <FolderOpen className="w-6 h-6 text-purple-400" />
-                <h3 className="font-semibold text-white group-hover:text-purple-300 transition-colors">{p.name}</h3>
-              </div>
-              {p.description && <p className="text-gray-400 text-sm mb-4 line-clamp-2">{p.description}</p>}
-              <div className="flex gap-4 text-xs text-gray-500">
-                <span className="flex items-center gap-1"><FileText className="w-3.5 h-3.5" /> {p.story_count} stories</span>
-                <span className="flex items-center gap-1"><BarChart3 className="w-3.5 h-3.5" /> {p.analysis_count} analyses</span>
-              </div>
-            </Link>
+            <div key={p.id} className="relative bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-colors group">
+              <Link to={`/projects/${p.id}`} className="block p-5">
+                <div className="flex items-center gap-3 mb-3">
+                  <FolderOpen className="w-6 h-6 text-purple-400" />
+                  <h3 className="font-semibold text-white group-hover:text-purple-300 transition-colors">{p.name}</h3>
+                </div>
+                {p.description && <p className="text-gray-400 text-sm mb-4 line-clamp-2">{p.description}</p>}
+                <div className="flex gap-4 text-xs text-gray-500">
+                  <span className="flex items-center gap-1"><FileText className="w-3.5 h-3.5" /> {p.story_count} stories</span>
+                  <span className="flex items-center gap-1"><BarChart3 className="w-3.5 h-3.5" /> {p.analysis_count} analyses</span>
+                </div>
+              </Link>
+              <button
+                onClick={(e) => handleDelete(p.id, e)}
+                className="absolute top-3 right-3 p-1.5 bg-red-500/10 hover:bg-red-500/30 text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                title="Delete project"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
           ))}
         </div>
       )}
