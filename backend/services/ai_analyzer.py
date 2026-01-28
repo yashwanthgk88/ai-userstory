@@ -1,9 +1,8 @@
 import json
 import logging
 
-import anthropic
-
 from config import settings
+from services.llm_provider import get_default_provider, get_provider, PROVIDER_DEFAULTS
 
 logger = logging.getLogger(__name__)
 
@@ -45,11 +44,11 @@ Generate at least 8 abuse cases, 6 STRIDE threats, and 15 security requirements.
 SYSTEM_PROMPT = DEFAULT_SYSTEM_PROMPT
 USER_PROMPT_TEMPLATE = DEFAULT_USER_PROMPT_TEMPLATE
 
-DEFAULT_MODEL = "claude-sonnet-4-20250514"
+DEFAULT_MODEL = settings.default_model or PROVIDER_DEFAULTS.get(settings.llm_provider, "claude-sonnet-4-20250514")
 DEFAULT_MAX_TOKENS = 4096
 
 
-async def analyze_with_claude(
+async def analyze_with_llm(
     title: str,
     description: str,
     acceptance_criteria: str | None = None,
@@ -58,15 +57,26 @@ async def analyze_with_claude(
     user_prompt_template: str | None = None,
     model: str | None = None,
     max_tokens: int | None = None,
+    provider_name: str | None = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
 ) -> dict:
-    """Call Claude API to generate security analysis. Returns parsed dict or raises."""
-    if not settings.anthropic_api_key:
-        raise ValueError("ANTHROPIC_API_KEY not configured")
-
+    """Call configured LLM provider to generate security analysis. Returns parsed dict or raises."""
     sys_prompt = system_prompt or DEFAULT_SYSTEM_PROMPT
     usr_template = user_prompt_template or DEFAULT_USER_PROMPT_TEMPLATE
-    ai_model = model or DEFAULT_MODEL
     tokens = max_tokens or DEFAULT_MAX_TOKENS
+
+    # Determine provider
+    if provider_name and api_key:
+        provider = get_provider(provider_name, api_key=api_key, base_url=base_url or "")
+    else:
+        provider = get_default_provider()
+
+    # Determine model
+    effective_provider = provider_name or settings.llm_provider
+    ai_model = model or settings.default_model or PROVIDER_DEFAULTS.get(effective_provider, "")
+    if not ai_model:
+        raise ValueError(f"No model configured for provider {effective_provider}")
 
     ac_section = ""
     if acceptance_criteria:
@@ -90,16 +100,9 @@ async def analyze_with_claude(
         custom_standards_section=cs_section,
     )
 
-    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    llm_response = await provider.chat(sys_prompt, user_prompt, ai_model, tokens)
 
-    message = await client.messages.create(
-        model=ai_model,
-        max_tokens=tokens,
-        system=sys_prompt,
-        messages=[{"role": "user", "content": user_prompt}],
-    )
-
-    response_text = message.content[0].text
+    response_text = llm_response.text
     raw_response = response_text
 
     # Extract JSON from response (may be wrapped in markdown code block)
@@ -110,9 +113,14 @@ async def analyze_with_claude(
 
     result = json.loads(response_text.strip())
     result["_raw_response"] = raw_response
-    result["_model"] = ai_model
-    result["_input_tokens"] = message.usage.input_tokens
-    result["_output_tokens"] = message.usage.output_tokens
-    logger.info("Claude analysis completed: %d abuse cases, %d requirements",
+    result["_model"] = llm_response.model
+    result["_input_tokens"] = llm_response.input_tokens
+    result["_output_tokens"] = llm_response.output_tokens
+    logger.info("LLM analysis completed (%s/%s): %d abuse cases, %d requirements",
+                effective_provider, ai_model,
                 len(result.get("abuse_cases", [])), len(result.get("security_requirements", [])))
     return result
+
+
+# Backward compatibility alias
+analyze_with_claude = analyze_with_llm
