@@ -86,7 +86,18 @@ class JiraClient:
                 json=payload,
                 headers=self.headers,
             )
-            resp.raise_for_status()
+            if resp.status_code >= 400:
+                error_text = resp.text
+                logger.error("Jira update failed for %s: %s - %s", issue_key, resp.status_code, error_text)
+                # Try to parse error details
+                try:
+                    error_data = resp.json()
+                    errors = error_data.get("errors", {})
+                    error_messages = error_data.get("errorMessages", [])
+                    logger.error("Jira errors: %s, messages: %s", errors, error_messages)
+                except Exception:
+                    pass
+                resp.raise_for_status()
             logger.info("Updated Jira issue: %s", issue_key)
             return {"key": issue_key, "updated": True}
 
@@ -149,146 +160,64 @@ class JiraClient:
 
     async def publish_analysis_to_issue(self, issue_key: str, analysis: dict, custom_fields: dict | None = None) -> dict:
         """
-        Publish analysis results directly into the Jira issue custom fields.
+        Publish analysis results directly into the Jira issue.
 
-        Automatically looks up custom fields named "Abuse cases" and "Security requirements"
-        and populates them with the analysis data. Also updates description with risk score summary.
+        Looks for custom fields named "Abuse cases" and "Security requirements".
+        Always updates the description with the full analysis.
         """
         risk_score = analysis.get("risk_score", 0)
         abuse_cases = analysis.get("abuse_cases", [])
         requirements = analysis.get("security_requirements", [])
         stride_threats = analysis.get("stride_threats", [])
 
-        fields_to_update = {}
-
-        # Auto-discover custom field IDs by name if not provided
-        if not custom_fields:
-            custom_fields = {}
-            # Look up "Abuse cases" field
-            abuse_field_id = await self.find_custom_field_id("Abuse cases")
-            if abuse_field_id:
-                custom_fields["abuse_cases"] = abuse_field_id
-                logger.info("Found 'Abuse cases' custom field: %s", abuse_field_id)
-
-            # Look up "Security requirements" field
-            req_field_id = await self.find_custom_field_id("Security requirements")
-            if req_field_id:
-                custom_fields["security_requirements"] = req_field_id
-                logger.info("Found 'Security requirements' custom field: %s", req_field_id)
-
-            # Look up "Risk score" or "Security Risk Score" field
-            risk_field_id = await self.find_custom_field_id("Risk score") or await self.find_custom_field_id("Security Risk Score")
-            if risk_field_id:
-                custom_fields["risk_score"] = risk_field_id
-                logger.info("Found risk score custom field: %s", risk_field_id)
-
-        # Get editmeta to check field types
-        try:
-            editmeta = await self.get_issue_editmeta(issue_key)
-            available_fields = editmeta.get("fields", {})
-        except Exception:
-            available_fields = {}
-
-        # Populate "Abuse cases" custom field
-        if custom_fields.get("abuse_cases") and abuse_cases:
-            field_id = custom_fields["abuse_cases"]
-            field_meta = available_fields.get(field_id, {})
-            field_schema = field_meta.get("schema", {})
-
-            # Build abuse cases content - format depends on field type
-            if field_schema.get("type") == "string":
-                # Plain text field - build text table
-                lines = [f"⚠️ ABUSE CASES ({len(abuse_cases)})", "=" * 50, ""]
-                for i, ac in enumerate(abuse_cases, 1):
-                    lines.append(f"{i}. {ac.get('threat', 'Unknown')}")
-                    lines.append(f"   Actor: {ac.get('actor', 'N/A')}")
-                    lines.append(f"   Impact: {ac.get('impact', 'N/A')}")
-                    lines.append(f"   Likelihood: {ac.get('likelihood', 'N/A')}")
-                    lines.append(f"   STRIDE: {ac.get('stride_category', 'N/A')}")
-                    lines.append(f"   Attack Vector: {ac.get('attack_vector', 'N/A')}")
-                    if ac.get("description"):
-                        lines.append(f"   Description: {ac.get('description')}")
-                    lines.append("")
-                fields_to_update[field_id] = "\n".join(lines)
-            else:
-                # Rich text field (ADF) - build table
-                abuse_sections = [
-                    {"type": "table", "headers": ["#", "Threat", "Actor", "Impact", "Likelihood", "STRIDE", "Attack Vector"], "rows": [
-                        [i+1, ac.get("threat", ""), ac.get("actor", ""), ac.get("impact", ""), ac.get("likelihood", ""), ac.get("stride_category", ""), ac.get("attack_vector", "")]
-                        for i, ac in enumerate(abuse_cases)
-                    ]}
-                ]
-                fields_to_update[field_id] = self._build_adf_content(abuse_sections)
-
-        # Populate "Security requirements" custom field
-        if custom_fields.get("security_requirements") and requirements:
-            field_id = custom_fields["security_requirements"]
-            field_meta = available_fields.get(field_id, {})
-            field_schema = field_meta.get("schema", {})
-
-            if field_schema.get("type") == "string":
-                # Plain text field
-                lines = [f"🛡️ SECURITY REQUIREMENTS ({len(requirements)})", "=" * 50, ""]
-                for req in requirements:
-                    lines.append(f"[{req.get('priority', 'Medium')}] {req.get('id', '')}: {req.get('text', '')}")
-                    lines.append(f"   Category: {req.get('category', 'N/A')}")
-                    if req.get("details"):
-                        lines.append(f"   Details: {req.get('details')}")
-                    lines.append("")
-                fields_to_update[field_id] = "\n".join(lines)
-            else:
-                # Rich text field (ADF)
-                req_sections = [
-                    {"type": "table", "headers": ["ID", "Priority", "Category", "Requirement", "Details"], "rows": [
-                        [req.get("id", ""), req.get("priority", ""), req.get("category", ""), req.get("text", ""), req.get("details", "")]
-                        for req in requirements
-                    ]}
-                ]
-                fields_to_update[field_id] = self._build_adf_content(req_sections)
-
-        # Populate risk score field (if exists and is numeric)
-        if custom_fields.get("risk_score"):
-            field_id = custom_fields["risk_score"]
-            field_meta = available_fields.get(field_id, {})
-            field_schema = field_meta.get("schema", {})
-
-            if field_schema.get("type") == "number":
-                fields_to_update[field_id] = risk_score
-            else:
-                fields_to_update[field_id] = str(risk_score)
-
-        # Update description with summary (risk score + counts)
+        # Get current issue to preserve description
         issue = await self.get_issue(issue_key)
         current_desc = issue.get("fields", {}).get("description")
 
-        # Build a brief summary section for the description
-        summary_sections = [
+        # Build the full analysis for description
+        analysis_sections = [
             {"type": "rule"},
-            {"type": "heading", "level": 2, "text": "🛡️ SecureReq AI Analysis Summary"},
+            {"type": "heading", "level": 2, "text": "🛡️ SecureReq AI - Security Analysis"},
             {"type": "paragraph", "text": f"Risk Score: {risk_score}/100"},
-            {"type": "bullet_list", "items": [
-                f"Abuse Cases: {len(abuse_cases)}",
-                f"Security Requirements: {len(requirements)}",
-                f"STRIDE Threats: {len(stride_threats)}",
-            ]},
         ]
 
-        # Add STRIDE summary in description
+        # Add abuse cases
+        if abuse_cases:
+            analysis_sections.append({"type": "heading", "level": 3, "text": f"⚠️ Abuse Cases ({len(abuse_cases)})"})
+            analysis_sections.append({
+                "type": "table",
+                "headers": ["#", "Threat", "Actor", "Impact", "Likelihood", "STRIDE"],
+                "rows": [[i+1, ac.get("threat", ""), ac.get("actor", ""), ac.get("impact", ""), ac.get("likelihood", ""), ac.get("stride_category", "")] for i, ac in enumerate(abuse_cases)]
+            })
+
+        # Add security requirements
+        if requirements:
+            analysis_sections.append({"type": "heading", "level": 3, "text": f"🛡️ Security Requirements ({len(requirements)})"})
+            analysis_sections.append({
+                "type": "table",
+                "headers": ["ID", "Priority", "Category", "Requirement"],
+                "rows": [[req.get("id", ""), req.get("priority", ""), req.get("category", ""), req.get("text", "")] for req in requirements]
+            })
+
+        # Add STRIDE threats
         if stride_threats:
-            summary_sections.append({"type": "heading", "level": 3, "text": "📊 STRIDE Threat Summary"})
-            summary_sections.append({
+            analysis_sections.append({"type": "heading", "level": 3, "text": f"📊 STRIDE Threats ({len(stride_threats)})"})
+            analysis_sections.append({
                 "type": "table",
                 "headers": ["Category", "Threat", "Risk Level"],
                 "rows": [[st.get("category", ""), st.get("threat", ""), st.get("risk_level", "")] for st in stride_threats]
             })
 
-        summary_sections.append({"type": "rule"})
-        summary_sections.append({"type": "paragraph", "text": "Generated by SecureReq AI"})
+        analysis_sections.append({"type": "rule"})
+        analysis_sections.append({"type": "paragraph", "text": "Generated by SecureReq AI"})
 
-        summary_adf = self._build_adf_content(summary_sections)
+        analysis_adf = self._build_adf_content(analysis_sections)
 
+        # Build fields to update
+        fields_to_update = {}
+
+        # Merge with existing description (remove old analysis if present)
         if current_desc and isinstance(current_desc, dict) and current_desc.get("content"):
-            # Remove existing SecureReq summary if present
             new_content = []
             skip_section = False
             for block in current_desc.get("content", []):
@@ -308,10 +237,10 @@ class JiraClient:
                     continue
                 new_content.append(block)
 
-            new_content.extend(summary_adf["content"])
+            new_content.extend(analysis_adf["content"])
             fields_to_update["description"] = {"type": "doc", "version": 1, "content": new_content}
         else:
-            fields_to_update["description"] = summary_adf
+            fields_to_update["description"] = analysis_adf
 
         result = await self.update_issue(issue_key, fields_to_update)
 
