@@ -101,26 +101,27 @@ async def import_from_jira(project_id: UUID, req: JiraImportRequest, user: User 
 
     auth = b64encode(f"{email}:{api_token}".encode()).decode()
     headers = {"Authorization": f"Basic {auth}", "Accept": "application/json"}
-    jql = req.jql or f"project = {project_key} AND type = Story ORDER BY created DESC"
-    from urllib.parse import urlparse
+    # Quote project key to handle reserved words like AND, OR, NOT
+    jql = req.jql or f'project = "{project_key}" AND type = Story ORDER BY created DESC'
+    from urllib.parse import urlparse, quote
     parsed = urlparse(jira_url)
     base_url = f"{parsed.scheme}://{parsed.netloc}"
 
     async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
         data = None
-        headers_json = {**headers, "Content-Type": "application/json"}
 
-        url = f"{base_url}/rest/api/3/search/jql"
-        resp = await client.post(url, json={"jql": jql, "maxResults": 50, "fields": ["summary", "description"]}, headers=headers_json)
+        # Use GET for the new /search/jql endpoint (POST doesn't work)
+        encoded_jql = quote(jql)
+        url = f"{base_url}/rest/api/3/search/jql?jql={encoded_jql}&maxResults=50&fields=summary,description"
+        resp = await client.get(url, headers=headers)
         if resp.status_code == 200:
             try:
                 data = resp.json()
             except Exception:
                 pass
 
+        # Fallback to older API versions if needed
         if data is None and resp.status_code in (404, 410):
-            from urllib.parse import quote
-            encoded_jql = quote(jql)
             for api_ver in ["3", "2"]:
                 url = f"{base_url}/rest/api/{api_ver}/search?jql={encoded_jql}&maxResults=50"
                 resp = await client.get(url, headers=headers)
@@ -273,16 +274,19 @@ async def sync_stories_from_integration(
         api_token = token
 
         auth = b64encode(f"{email}:{api_token}".encode()).decode()
-        headers = {"Authorization": f"Basic {auth}", "Accept": "application/json", "Content-Type": "application/json"}
-        from urllib.parse import urlparse
+        headers = {"Authorization": f"Basic {auth}", "Accept": "application/json"}
+        from urllib.parse import urlparse, quote
         parsed = urlparse(jira_url)
         base_url = f"{parsed.scheme}://{parsed.netloc}"
 
-        jql = f"project = {project_key} AND type = Story ORDER BY created DESC"
+        # Quote project key to handle reserved words like AND, OR, NOT
+        jql = f'project = "{project_key}" AND type = Story ORDER BY created DESC'
+        encoded_jql = quote(jql)
 
         async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-            url = f"{base_url}/rest/api/3/search/jql"
-            resp = await client.post(url, json={"jql": jql, "maxResults": 100, "fields": ["summary", "description"]}, headers=headers)
+            # Use GET for the new /search/jql endpoint
+            url = f"{base_url}/rest/api/3/search/jql?jql={encoded_jql}&maxResults=100&fields=summary,description"
+            resp = await client.get(url, headers=headers)
 
             data = None
             if resp.status_code == 200:
@@ -291,9 +295,8 @@ async def sync_stories_from_integration(
                 except Exception:
                     pass
 
+            # Fallback to older API if needed
             if data is None and resp.status_code in (404, 410):
-                from urllib.parse import quote
-                encoded_jql = quote(jql)
                 url = f"{base_url}/rest/api/3/search?jql={encoded_jql}&maxResults=100"
                 resp = await client.get(url, headers=headers)
                 if resp.status_code == 200:
