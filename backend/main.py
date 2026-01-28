@@ -17,11 +17,15 @@ async def lifespan(app: FastAPI):
     # Run database migrations on startup
     logger.info("Running database migrations...")
     try:
-        # Try running alembic from current directory first
+        import os
+        env = os.environ.copy()
+        env["PYTHONPATH"] = "/app"
         result = subprocess.run(
             ["alembic", "upgrade", "head"],
             capture_output=True,
             text=True,
+            cwd="/app",
+            env=env,
         )
         if result.returncode == 0:
             logger.info("Migrations completed successfully")
