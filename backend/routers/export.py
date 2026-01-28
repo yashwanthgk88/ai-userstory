@@ -206,6 +206,9 @@ async def publish_to_source(
         "stride_threats": analysis.stride_threats,
     }
 
+    abuse_count = len(analysis_data.get("abuse_cases", []))
+    req_count = len(analysis_data.get("security_requirements", []))
+
     try:
         if story.source == "jira":
             jira_url = config.get("url", "")
@@ -214,20 +217,19 @@ async def publish_to_source(
             await client.publish_analysis_to_issue(story.external_id, analysis_data)
             return ExportResult(
                 format="jira",
-                items_exported=1,
-                message=f"Published analysis to Jira issue {story.external_id}",
+                items_exported=abuse_count + req_count,
+                message=f"Updated {story.external_id}: {abuse_count} abuse cases, {req_count} security requirements (Risk: {analysis_data['risk_score']})",
             )
         elif story.source == "ado":
             org_url = config.get("url", "")
             project = config.get("project", "")
             client = ADOClient(org_url, project, token)
-            # ADO external_id is typically the work item ID number
             work_item_id = int(story.external_id)
             await client.publish_analysis_to_work_item(work_item_id, analysis_data)
             return ExportResult(
                 format="ado",
-                items_exported=1,
-                message=f"Published analysis to ADO work item {story.external_id}",
+                items_exported=abuse_count + req_count,
+                message=f"Updated work item {story.external_id}: {abuse_count} abuse cases, {req_count} security requirements (Risk: {analysis_data['risk_score']})",
             )
     except Exception as e:
         logger.exception("Failed to publish to source")
