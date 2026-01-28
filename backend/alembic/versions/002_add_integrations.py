@@ -1,7 +1,7 @@
 """add integrations table
 
 Revision ID: 002_add_integrations
-Revises: 001_initial
+Revises: 001
 Create Date: 2026-01-28
 """
 from alembic import op
@@ -9,7 +9,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 
 revision = "002_add_integrations"
-down_revision = "001_initial"
+down_revision = "001"
 branch_labels = None
 depends_on = None
 
