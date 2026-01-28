@@ -84,7 +84,7 @@ async def import_from_jira(project_id: UUID, req: JiraImportRequest, user: User 
 
         # Try new POST /rest/api/3/search/jql first
         url = f"{base_url}/rest/api/3/search/jql"
-        resp = await client.post(url, json={"jql": jql, "maxResults": 50}, headers=headers_json)
+        resp = await client.post(url, json={"jql": jql, "maxResults": 50, "fields": ["summary", "description"]}, headers=headers_json)
         if resp.status_code == 200:
             try:
                 data = resp.json()
