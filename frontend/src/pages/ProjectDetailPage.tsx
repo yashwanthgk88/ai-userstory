@@ -209,12 +209,15 @@ export default function ProjectDetailPage() {
           <Link to={`/projects/${projectId}/history`} className="flex items-center gap-2 bg-white/10 hover:bg-white/20 px-3 py-2 rounded-lg text-sm text-white border border-white/20">
             <Clock className="w-4 h-4" /> History
           </Link>
-          {hasJiraOrAdoIntegration && (
-            <button onClick={handleSync} disabled={syncing} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 px-3 py-2 rounded-lg text-sm text-white font-medium">
-              {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-              {syncing ? 'Syncing...' : 'Refresh Stories'}
-            </button>
-          )}
+          <button
+            onClick={hasJiraOrAdoIntegration ? handleSync : () => alert('Please add a Jira or ADO integration first (click Integrations button)')}
+            disabled={syncing}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium ${hasJiraOrAdoIntegration ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-blue-600/30 text-blue-300 cursor-help'} disabled:opacity-50`}
+            title={hasJiraOrAdoIntegration ? 'Sync new stories from Jira/ADO' : 'Add a Jira or ADO integration first'}
+          >
+            {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            {syncing ? 'Syncing...' : 'Refresh Stories'}
+          </button>
           <button onClick={() => setShowImport(true)} className="flex items-center gap-2 bg-white/10 hover:bg-white/20 px-3 py-2 rounded-lg text-sm text-white border border-white/20">
             <Upload className="w-4 h-4" /> Import
           </button>
