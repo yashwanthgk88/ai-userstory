@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
-from routers import auth, projects, user_stories, analysis, compliance, custom_standards, export
+from routers import auth, projects, user_stories, analysis, compliance, custom_standards, export, integrations
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
@@ -25,6 +25,7 @@ app.include_router(analysis.router, prefix="/api")
 app.include_router(compliance.router, prefix="/api")
 app.include_router(custom_standards.router, prefix="/api")
 app.include_router(export.router, prefix="/api")
+app.include_router(integrations.router, prefix="/api")
 
 
 @app.get("/api/health")

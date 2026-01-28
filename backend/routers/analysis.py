@@ -22,30 +22,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["analysis"])
 
 
-@router.post("/stories/{story_id}/analyze", response_model=AnalysisResponse)
-async def run_analysis(story_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(UserStory).where(UserStory.id == story_id))
-    story = result.scalar_one_or_none()
-    if not story:
-        raise HTTPException(status_code=404, detail="Story not found")
-
-    # Verify ownership
-    proj = await db.execute(select(Project).where(Project.id == story.project_id, Project.owner_id == user.id))
-    if not proj.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    # Load custom standards for this project
+async def _analyze_single_story(story: UserStory, db: AsyncSession) -> SecurityAnalysis:
+    """Core analysis logic for a single story."""
     cs_result = await db.execute(select(CustomStandard).where(CustomStandard.project_id == story.project_id))
     custom_stds = cs_result.scalars().all()
     custom_std_data = [{"name": cs.name, "controls": cs.controls} for cs in custom_stds] if custom_stds else None
 
-    # Determine next version
     max_version = (await db.execute(
-        select(func.max(SecurityAnalysis.version)).where(SecurityAnalysis.user_story_id == story_id)
+        select(func.max(SecurityAnalysis.version)).where(SecurityAnalysis.user_story_id == story.id)
     )).scalar() or 0
-    next_version = max_version + 1
 
-    # Try Claude API, fall back to templates
     ai_model = None
     try:
         analysis_data = await analyze_with_claude(
@@ -58,8 +44,8 @@ async def run_analysis(story_id: UUID, user: User = Depends(get_current_user), d
         ai_model = "template-fallback"
 
     analysis = SecurityAnalysis(
-        user_story_id=story_id,
-        version=next_version,
+        user_story_id=story.id,
+        version=max_version + 1,
         abuse_cases=analysis_data.get("abuse_cases", []),
         stride_threats=analysis_data.get("stride_threats", []),
         security_requirements=analysis_data.get("security_requirements", []),
@@ -69,7 +55,6 @@ async def run_analysis(story_id: UUID, user: User = Depends(get_current_user), d
     db.add(analysis)
     await db.flush()
 
-    # Generate compliance mappings
     mappings = map_requirements_to_standards(
         analysis_data.get("security_requirements", []),
         custom_standards=custom_std_data,
@@ -84,9 +69,48 @@ async def run_analysis(story_id: UUID, user: User = Depends(get_current_user), d
             relevance_score=m.get("relevance_score", 0.0),
         ))
 
+    return analysis
+
+
+@router.post("/stories/{story_id}/analyze", response_model=AnalysisResponse)
+async def run_analysis(story_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(UserStory).where(UserStory.id == story_id))
+    story = result.scalar_one_or_none()
+    if not story:
+        raise HTTPException(status_code=404, detail="Story not found")
+
+    proj = await db.execute(select(Project).where(Project.id == story.project_id, Project.owner_id == user.id))
+    if not proj.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    analysis = await _analyze_single_story(story, db)
     await db.commit()
     await db.refresh(analysis)
     return analysis
+
+
+@router.post("/projects/{project_id}/analyze")
+async def bulk_analyze(project_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    proj = await db.execute(select(Project).where(Project.id == project_id, Project.owner_id == user.id))
+    if not proj.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    stories_result = await db.execute(select(UserStory).where(UserStory.project_id == project_id))
+    stories = stories_result.scalars().all()
+    if not stories:
+        raise HTTPException(status_code=400, detail="No stories in this project")
+
+    results = []
+    for story in stories:
+        try:
+            analysis = await _analyze_single_story(story, db)
+            results.append({"story_id": str(story.id), "story_title": story.title, "status": "success", "analysis_id": str(analysis.id)})
+        except Exception as e:
+            logger.error("Bulk analyze failed for story %s: %s", story.id, e)
+            results.append({"story_id": str(story.id), "story_title": story.title, "status": "error", "error": str(e)})
+
+    await db.commit()
+    return {"total": len(stories), "results": results}
 
 
 @router.get("/stories/{story_id}/analyses", response_model=list[AnalysisSummary])

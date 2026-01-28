@@ -21,6 +21,7 @@ export default function StoryAnalysisPage() {
   const [pushTable, setPushTable] = useState('rm_story')
   const [pushUser, setPushUser] = useState('')
   const [pushPass, setPushPass] = useState('')
+  const [pushIntegrationId, setPushIntegrationId] = useState('')
 
   const { data: story } = useQuery({
     queryKey: ['story', storyId],
@@ -30,6 +31,12 @@ export default function StoryAnalysisPage() {
   const { data: analyses = [] } = useQuery({
     queryKey: ['analyses', storyId],
     queryFn: () => api.get(`/stories/${storyId}/analyses`).then(r => r.data),
+  })
+
+  const { data: integrations = [] } = useQuery({
+    queryKey: ['integrations', projectId],
+    queryFn: () => api.get(`/projects/${projectId}/integrations`).then(r => r.data),
+    enabled: !!projectId,
   })
 
   const latestAnalysisId = analyses.length > 0 ? analyses[0].id : null
@@ -72,7 +79,9 @@ export default function StoryAnalysisPage() {
     setExportLoading(showPush)
     try {
       let body: any = {}
-      if (showPush === 'jira') {
+      if (pushIntegrationId) {
+        body = { integration_id: pushIntegrationId }
+      } else if (showPush === 'jira') {
         body = { jira_url: pushUrl, project_key: pushProject, api_token: pushToken, email: pushEmail }
       } else if (showPush === 'ado') {
         body = { org_url: pushUrl, project: pushProject, pat: pushToken }
@@ -88,6 +97,8 @@ export default function StoryAnalysisPage() {
       setExportLoading('')
     }
   }
+
+  const filteredIntegrations = showPush ? integrations.filter((i: any) => i.integration_type === showPush) : []
 
   const risk = analysis ? riskColor(analysis.risk_score) : null
 
@@ -236,13 +247,13 @@ export default function StoryAnalysisPage() {
               <button onClick={() => handleExport('csv')} disabled={!!exportLoading} className="flex items-center justify-center gap-1 py-2 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 rounded-lg text-sm border border-blue-500/30">
                 <FileDown className="w-4 h-4" /> CSV
               </button>
-              <button onClick={() => setShowPush('jira')} className="flex items-center justify-center gap-1 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 rounded-lg text-sm border border-blue-500/30">
+              <button onClick={() => { setShowPush('jira'); setPushIntegrationId('') }} className="flex items-center justify-center gap-1 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 rounded-lg text-sm border border-blue-500/30">
                 <Send className="w-4 h-4" /> Jira
               </button>
-              <button onClick={() => setShowPush('ado')} className="flex items-center justify-center gap-1 py-2 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 rounded-lg text-sm border border-sky-500/30">
+              <button onClick={() => { setShowPush('ado'); setPushIntegrationId('') }} className="flex items-center justify-center gap-1 py-2 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 rounded-lg text-sm border border-sky-500/30">
                 <Send className="w-4 h-4" /> ADO
               </button>
-              <button onClick={() => setShowPush('servicenow')} className="flex items-center justify-center gap-1 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 rounded-lg text-sm border border-emerald-500/30">
+              <button onClick={() => { setShowPush('servicenow'); setPushIntegrationId('') }} className="flex items-center justify-center gap-1 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 rounded-lg text-sm border border-emerald-500/30">
                 <Send className="w-4 h-4" /> ServiceNow
               </button>
             </div>
@@ -256,28 +267,45 @@ export default function StoryAnalysisPage() {
             <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
               <div className="bg-slate-800 border border-white/20 rounded-2xl max-w-lg w-full p-6">
                 <h2 className="text-xl font-bold text-white mb-4">Push to {showPush === 'jira' ? 'Jira' : showPush === 'ado' ? 'Azure DevOps' : 'ServiceNow'}</h2>
-                <div className="space-y-3">
-                  {showPush === 'servicenow' ? (
-                    <>
-                      <input value={pushUrl} onChange={e => setPushUrl(e.target.value)} placeholder="Instance URL (https://instance.service-now.com)" className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-500" />
-                      <input value={pushUser} onChange={e => setPushUser(e.target.value)} placeholder="Username" className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-500" />
-                      <input type="password" value={pushPass} onChange={e => setPushPass(e.target.value)} placeholder="Password" className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-500" />
-                      <input value={pushTable} onChange={e => setPushTable(e.target.value)} placeholder="Table (e.g., rm_story)" className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-500" />
-                    </>
-                  ) : (
-                    <>
-                      <input value={pushUrl} onChange={e => setPushUrl(e.target.value)} placeholder={showPush === 'jira' ? 'https://your-company.atlassian.net' : 'https://dev.azure.com/your-org'} className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-500" />
-                      <input value={pushProject} onChange={e => setPushProject(e.target.value)} placeholder={showPush === 'jira' ? 'Project Key' : 'Project Name'} className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-500" />
-                      {showPush === 'jira' && <input value={pushEmail} onChange={e => setPushEmail(e.target.value)} placeholder="Email" className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-500" />}
-                      <input type="password" value={pushToken} onChange={e => setPushToken(e.target.value)} placeholder={showPush === 'jira' ? 'API Token' : 'Personal Access Token'} className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-500" />
-                    </>
-                  )}
-                  <div className="flex gap-2">
-                    <button onClick={handlePush} disabled={!!exportLoading} className="flex-1 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg font-medium">
-                      {exportLoading ? 'Pushing...' : `Push ${(analysis.abuse_cases?.length || 0) + (analysis.security_requirements?.length || 0)} items`}
-                    </button>
-                    <button onClick={() => setShowPush(null)} className="px-4 py-2 bg-white/10 text-white rounded-lg">Cancel</button>
+
+                {/* Saved integrations dropdown */}
+                {filteredIntegrations.length > 0 && (
+                  <div className="mb-4">
+                    <label className="text-xs text-gray-400 mb-1 block">Use saved integration</label>
+                    <select value={pushIntegrationId} onChange={e => setPushIntegrationId(e.target.value)} className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white">
+                      <option value="">Enter credentials manually</option>
+                      {filteredIntegrations.map((i: any) => (
+                        <option key={i.id} value={i.id}>{i.name} ({i.config?.url})</option>
+                      ))}
+                    </select>
                   </div>
+                )}
+
+                {!pushIntegrationId && (
+                  <div className="space-y-3">
+                    {showPush === 'servicenow' ? (
+                      <>
+                        <input value={pushUrl} onChange={e => setPushUrl(e.target.value)} placeholder="Instance URL (https://instance.service-now.com)" className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-500" />
+                        <input value={pushUser} onChange={e => setPushUser(e.target.value)} placeholder="Username" className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-500" />
+                        <input type="password" value={pushPass} onChange={e => setPushPass(e.target.value)} placeholder="Password" className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-500" />
+                        <input value={pushTable} onChange={e => setPushTable(e.target.value)} placeholder="Table (e.g., rm_story)" className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-500" />
+                      </>
+                    ) : (
+                      <>
+                        <input value={pushUrl} onChange={e => setPushUrl(e.target.value)} placeholder={showPush === 'jira' ? 'https://your-company.atlassian.net' : 'https://dev.azure.com/your-org'} className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-500" />
+                        <input value={pushProject} onChange={e => setPushProject(e.target.value)} placeholder={showPush === 'jira' ? 'Project Key' : 'Project Name'} className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-500" />
+                        {showPush === 'jira' && <input value={pushEmail} onChange={e => setPushEmail(e.target.value)} placeholder="Email" className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-500" />}
+                        <input type="password" value={pushToken} onChange={e => setPushToken(e.target.value)} placeholder={showPush === 'jira' ? 'API Token' : 'Personal Access Token'} className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-500" />
+                      </>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex gap-2 mt-4">
+                  <button onClick={handlePush} disabled={!!exportLoading} className="flex-1 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg font-medium">
+                    {exportLoading ? 'Pushing...' : `Push ${(analysis.abuse_cases?.length || 0) + (analysis.security_requirements?.length || 0)} items`}
+                  </button>
+                  <button onClick={() => setShowPush(null)} className="px-4 py-2 bg-white/10 text-white rounded-lg">Cancel</button>
                 </div>
               </div>
             </div>

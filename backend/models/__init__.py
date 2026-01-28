@@ -4,6 +4,7 @@ from models.user_story import UserStory
 from models.analysis import SecurityAnalysis
 from models.compliance_mapping import ComplianceMapping
 from models.custom_standard import CustomStandard
+from models.integration import Integration
 
 __all__ = [
     "User",
@@ -12,4 +13,5 @@ __all__ = [
     "SecurityAnalysis",
     "ComplianceMapping",
     "CustomStandard",
+    "Integration",
 ]

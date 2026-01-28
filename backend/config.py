@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 1440
     anthropic_api_key: str = ""
+    encryption_key: str = "PzEY8tPkd2xkzBMNUYj7Owx9yw-kFhQZhcdyIaudsWY="
     cors_origins: str = "http://localhost:3000,http://localhost:80"
     port: int = 8000
 
