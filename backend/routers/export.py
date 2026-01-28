@@ -218,7 +218,7 @@ async def publish_to_source(
             return ExportResult(
                 format="jira",
                 items_exported=abuse_count + req_count,
-                message=f"Updated {story.external_id}: {abuse_count} abuse cases, {req_count} security requirements (Risk: {analysis_data['risk_score']})",
+                message=f"Updated {story.external_id}: {abuse_count} abuse cases and {req_count} security requirements published to custom fields",
             )
         elif story.source == "ado":
             org_url = config.get("url", "")
@@ -231,6 +231,9 @@ async def publish_to_source(
                 items_exported=abuse_count + req_count,
                 message=f"Updated work item {story.external_id}: {abuse_count} abuse cases, {req_count} security requirements (Risk: {analysis_data['risk_score']})",
             )
+    except ValueError as e:
+        # Custom field not found error
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.exception("Failed to publish to source")
         raise HTTPException(status_code=502, detail=f"Failed to publish to {story.source}: {e}")

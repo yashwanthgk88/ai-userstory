@@ -271,10 +271,10 @@ export default function StoryAnalysisPage() {
                 <div>
                   <h3 className="font-semibold text-white flex items-center gap-2">
                     <Upload className="w-5 h-5 text-green-400" />
-                    Publish Results to {sourceLabel}
+                    Publish to {sourceLabel} Custom Fields
                   </h3>
                   <p className="text-sm text-gray-400 mt-1">
-                    Update {story?.external_id} with abuse cases, security requirements & risk score
+                    Update {story?.external_id} "Abuse cases" and "Security requirements" fields
                   </p>
                 </div>
                 <button
