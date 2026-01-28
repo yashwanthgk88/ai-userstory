@@ -162,15 +162,16 @@ async def get_jira_projects(integration_id: UUID, user: User = Depends(get_curre
 
     try:
         projects = await client.get_projects()
-        return [
-            {
-                "id": p.get("id"),
+        result = []
+        for p in projects:
+            logger.info("Jira project raw data: id=%s, key=%s, name=%s", p.get("id"), p.get("key"), p.get("name"))
+            result.append({
+                "id": p.get("id"),  # This should be numeric like "10001"
                 "key": p.get("key"),
                 "name": p.get("name"),
                 "avatar_url": p.get("avatarUrls", {}).get("48x48"),
-            }
-            for p in projects
-        ]
+            })
+        return result
     except Exception as e:
         logger.exception("Failed to fetch Jira projects")
         raise HTTPException(status_code=502, detail=f"Failed to fetch Jira projects: {e}")

@@ -144,6 +144,8 @@ async def create_project_from_jira(
     config = integration.config
     client = JiraClient(config.get("url", ""), config.get("email", ""), token)
 
+    logger.info("Importing Jira issues - project_id=%s, project_key=%s", req.jira_project_id, req.jira_project_key)
+
     try:
         issues = await client.get_project_issues(req.jira_project_id)
         imported_count = 0
@@ -162,8 +164,8 @@ async def create_project_from_jira(
         await db.commit()
         logger.info("Imported %d stories from Jira project %s", imported_count, req.jira_project_key)
     except Exception as e:
-        logger.exception("Failed to import Jira issues")
-        # Don't fail the whole operation if import fails - the project is created
+        logger.exception("Failed to import Jira issues: %s", str(e))
+        raise HTTPException(status_code=400, detail=f"Jira import failed: {str(e)}")
 
     resp = ProjectResponse.model_validate(project)
     story_count = (await db.execute(select(func.count()).where(UserStory.project_id == project.id))).scalar() or 0
