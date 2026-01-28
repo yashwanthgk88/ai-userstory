@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../api/client'
-import { Plus, FileText, BarChart3, Upload, Clock, Settings, ArrowLeft, Play, Loader2, Link2, Trash2, Zap } from 'lucide-react'
+import { Plus, FileText, BarChart3, Upload, Clock, Settings, ArrowLeft, Play, Loader2, Link2, Trash2, Zap, RefreshCw } from 'lucide-react'
 
 export default function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>()
@@ -39,7 +39,11 @@ export default function ProjectDetailPage() {
   // Per-story analyze
   const [analyzingStoryId, setAnalyzingStoryId] = useState<string | null>(null)
 
-  const { data: project } = useQuery({
+  // Sync state
+  const [syncing, setSyncing] = useState(false)
+  const [syncResult, setSyncResult] = useState<any>(null)
+
+  const { data: space } = useQuery({
     queryKey: ['project', projectId],
     queryFn: () => api.get(`/projects/${projectId}`).then(r => r.data),
   })
@@ -64,6 +68,23 @@ export default function ProjectDetailPage() {
       setCriteria('')
     },
   })
+
+  // Check if there's a Jira or ADO integration
+  const hasJiraOrAdoIntegration = integrations.some((i: any) => i.integration_type === 'jira' || i.integration_type === 'ado')
+
+  const handleSync = async () => {
+    setSyncing(true)
+    setSyncResult(null)
+    try {
+      const resp = await api.post(`/projects/${projectId}/stories/sync`)
+      setSyncResult(resp.data)
+      queryClient.invalidateQueries({ queryKey: ['stories', projectId] })
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Sync failed')
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   const handleImport = async () => {
     setImportLoading(true)
@@ -168,15 +189,15 @@ export default function ProjectDetailPage() {
   return (
     <div>
       <div className="flex items-center gap-2 text-gray-400 text-sm mb-4">
-        <Link to="/" className="hover:text-white"><ArrowLeft className="w-4 h-4 inline" /> Projects</Link>
+        <Link to="/" className="hover:text-white"><ArrowLeft className="w-4 h-4 inline" /> Spaces</Link>
         <span>/</span>
-        <span className="text-white">{project?.name}</span>
+        <span className="text-white">{space?.name}</span>
       </div>
 
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">{project?.name}</h1>
-          {project?.description && <p className="text-gray-400 mt-1">{project.description}</p>}
+          <h1 className="text-2xl font-bold text-white">{space?.name}</h1>
+          {space?.description && <p className="text-gray-400 mt-1">{space.description}</p>}
         </div>
         <div className="flex gap-2 flex-wrap justify-end">
           <button onClick={() => setShowIntegrations(true)} className="flex items-center gap-2 bg-white/10 hover:bg-white/20 px-3 py-2 rounded-lg text-sm text-white border border-white/20">
@@ -188,6 +209,12 @@ export default function ProjectDetailPage() {
           <Link to={`/projects/${projectId}/history`} className="flex items-center gap-2 bg-white/10 hover:bg-white/20 px-3 py-2 rounded-lg text-sm text-white border border-white/20">
             <Clock className="w-4 h-4" /> History
           </Link>
+          {hasJiraOrAdoIntegration && (
+            <button onClick={handleSync} disabled={syncing} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 px-3 py-2 rounded-lg text-sm text-white font-medium">
+              {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              {syncing ? 'Syncing...' : 'Refresh Stories'}
+            </button>
+          )}
           <button onClick={() => setShowImport(true)} className="flex items-center gap-2 bg-white/10 hover:bg-white/20 px-3 py-2 rounded-lg text-sm text-white border border-white/20">
             <Upload className="w-4 h-4" /> Import
           </button>
@@ -200,6 +227,16 @@ export default function ProjectDetailPage() {
           </button>
         </div>
       </div>
+
+      {/* Sync Result */}
+      {syncResult && (
+        <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4 mb-4">
+          <div className="flex items-center justify-between">
+            <span className="text-blue-300 font-medium">{syncResult.message}</span>
+            <button onClick={() => setSyncResult(null)} className="text-gray-400 hover:text-white text-sm">Dismiss</button>
+          </div>
+        </div>
+      )}
 
       {/* Bulk Analysis Result */}
       {bulkResult && (
@@ -331,7 +368,10 @@ export default function ProjectDetailPage() {
         <div className="text-center py-16 bg-white/5 border border-white/10 rounded-2xl">
           <FileText className="w-16 h-16 text-purple-400 mx-auto mb-4" />
           <h3 className="text-xl font-semibold text-white mb-2">No user stories yet</h3>
-          <p className="text-gray-400">Add stories manually or import from Jira / Azure DevOps</p>
+          <p className="text-gray-400 mb-4">Add stories manually, import from Jira/ADO, or use the Refresh button to sync from your connected integration</p>
+          {!hasJiraOrAdoIntegration && (
+            <p className="text-sm text-yellow-400">Tip: Add a Jira or ADO integration to enable the Refresh button</p>
+          )}
         </div>
       ) : (
         <div className="space-y-3">

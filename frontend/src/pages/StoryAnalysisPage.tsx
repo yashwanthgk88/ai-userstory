@@ -122,7 +122,7 @@ export default function StoryAnalysisPage() {
   return (
     <div>
       <div className="flex items-center gap-2 text-gray-400 text-sm mb-4">
-        <Link to="/" className="hover:text-white">Projects</Link><span>/</span>
+        <Link to="/" className="hover:text-white">Spaces</Link><span>/</span>
         <Link to={`/projects/${projectId}`} className="hover:text-white"><ArrowLeft className="w-3 h-3 inline" /> Back</Link><span>/</span>
         <span className="text-white">{story?.title}</span>
       </div>
