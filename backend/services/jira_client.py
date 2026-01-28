@@ -51,6 +51,36 @@ class JiraClient:
             resp.raise_for_status()
             return resp.json()
 
+    async def get_projects(self) -> list[dict]:
+        """Get all accessible Jira projects."""
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(
+                f"{self.base_url}/rest/api/3/project/search",
+                headers=self.headers,
+                params={"maxResults": 100}
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return data.get("values", [])
+
+    async def get_project_issues(self, project_key: str, max_results: int = 100) -> list[dict]:
+        """Get all issues (user stories) from a Jira project."""
+        # Search for issues in the project - get Story, Task, Bug, etc.
+        jql = f'project = "{project_key}" ORDER BY created DESC'
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                f"{self.base_url}/rest/api/3/search",
+                headers=self.headers,
+                json={
+                    "jql": jql,
+                    "maxResults": max_results,
+                    "fields": ["summary", "description", "issuetype", "status", "created", "updated"]
+                }
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return data.get("issues", [])
+
     async def get_fields(self) -> list[dict]:
         """Get all fields including custom fields."""
         async with httpx.AsyncClient(timeout=30) as client:
