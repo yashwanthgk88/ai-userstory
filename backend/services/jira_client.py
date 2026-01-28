@@ -54,19 +54,33 @@ class JiraClient:
     async def get_projects(self) -> list[dict]:
         """Get all accessible Jira projects."""
         async with httpx.AsyncClient(timeout=30) as client:
+            # Try the search endpoint first (Jira Cloud)
             resp = await client.get(
                 f"{self.base_url}/rest/api/3/project/search",
                 headers=self.headers,
                 params={"maxResults": 100}
             )
+            if resp.status_code == 400:
+                # Fallback to simple project list endpoint
+                logger.info("project/search returned 400, trying /project endpoint")
+                resp = await client.get(
+                    f"{self.base_url}/rest/api/3/project",
+                    headers=self.headers,
+                )
+                if resp.status_code >= 400:
+                    logger.error("Jira get_projects failed: %s - %s", resp.status_code, resp.text)
+                resp.raise_for_status()
+                return resp.json()  # Returns array directly
+            if resp.status_code >= 400:
+                logger.error("Jira get_projects failed: %s - %s", resp.status_code, resp.text)
             resp.raise_for_status()
             data = resp.json()
             return data.get("values", [])
 
     async def get_project_issues(self, project_key: str, max_results: int = 100) -> list[dict]:
         """Get all issues (user stories) from a Jira project."""
-        # Search for issues in the project - get Story, Task, Bug, etc.
-        jql = f'project = "{project_key}" ORDER BY created DESC'
+        # Search for issues in the project - use project key without quotes
+        jql = f"project = {project_key} ORDER BY created DESC"
         async with httpx.AsyncClient(timeout=60) as client:
             resp = await client.post(
                 f"{self.base_url}/rest/api/3/search",
@@ -77,6 +91,8 @@ class JiraClient:
                     "fields": ["summary", "description", "issuetype", "status", "created", "updated"]
                 }
             )
+            if resp.status_code >= 400:
+                logger.error("Jira search failed: %s - %s", resp.status_code, resp.text)
             resp.raise_for_status()
             data = resp.json()
             return data.get("issues", [])
