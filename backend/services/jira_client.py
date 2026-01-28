@@ -125,6 +125,7 @@ class JiraClient:
     async def update_issue(self, issue_key: str, fields: dict) -> dict:
         """Update issue fields."""
         payload = {"fields": fields}
+        logger.info("Updating Jira issue %s with fields: %s", issue_key, list(fields.keys()))
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.put(
                 f"{self.base_url}/rest/api/3/issue/{issue_key}",
@@ -134,12 +135,23 @@ class JiraClient:
             if resp.status_code >= 400:
                 error_text = resp.text
                 logger.error("Jira update failed for %s: %s - %s", issue_key, resp.status_code, error_text)
-                # Try to parse error details
+                # Try to parse error details and raise with meaningful message
                 try:
                     error_data = resp.json()
                     errors = error_data.get("errors", {})
                     error_messages = error_data.get("errorMessages", [])
                     logger.error("Jira errors: %s, messages: %s", errors, error_messages)
+                    # Build a helpful error message
+                    error_details = []
+                    if error_messages:
+                        error_details.extend(error_messages)
+                    if errors:
+                        for field_id, msg in errors.items():
+                            error_details.append(f"{field_id}: {msg}")
+                    if error_details:
+                        raise ValueError(f"Jira API error: {'; '.join(error_details)}")
+                except ValueError:
+                    raise
                 except Exception:
                     pass
                 resp.raise_for_status()
@@ -282,8 +294,10 @@ class JiraClient:
 
         fields_to_update = {}
         updated_field_names = []
+        missing_fields = []
 
         # Auto-discover custom field IDs by name
+        logger.info("Looking for custom fields in Jira...")
         abuse_field_id = await self.find_custom_field_id("Abuse cases")
         req_field_id = await self.find_custom_field_id("Security requirements")
 
@@ -291,62 +305,60 @@ class JiraClient:
             logger.info("Found 'Abuse cases' custom field: %s", abuse_field_id)
         else:
             logger.warning("Custom field 'Abuse cases' not found in Jira")
+            missing_fields.append("Abuse cases")
 
         if req_field_id:
             logger.info("Found 'Security requirements' custom field: %s", req_field_id)
         else:
             logger.warning("Custom field 'Security requirements' not found in Jira")
+            missing_fields.append("Security requirements")
 
-        # Get editmeta to check field types
+        # Get editmeta to check field types and editability
         try:
             editmeta = await self.get_issue_editmeta(issue_key)
             available_fields = editmeta.get("fields", {})
+            logger.info("Editable fields for %s: %s", issue_key, list(available_fields.keys()))
         except Exception as e:
-            logger.warning("Could not get editmeta: %s", e)
+            logger.warning("Could not get editmeta for %s: %s", issue_key, e)
             available_fields = {}
 
         # Populate "Abuse cases" custom field
         if abuse_field_id and abuse_cases:
+            if abuse_field_id not in available_fields:
+                logger.warning("Field %s exists but is not editable for issue %s", abuse_field_id, issue_key)
+
             field_meta = available_fields.get(abuse_field_id, {})
             field_schema = field_meta.get("schema", {})
             field_type = field_schema.get("type", "string")
+            logger.info("Abuse cases field type: %s, schema: %s", field_type, field_schema)
 
             abuse_text = self._build_abuse_cases_text(abuse_cases)
 
-            if field_type in ("string", "array"):
-                # Plain text or text area field
-                fields_to_update[abuse_field_id] = abuse_text
-            else:
-                # Try ADF format for rich text
-                adf_content = self._build_adf_content([
-                    {"type": "paragraph", "text": abuse_text}
-                ])
-                fields_to_update[abuse_field_id] = adf_content
-
+            # Always try plain text first - it's most universally accepted
+            fields_to_update[abuse_field_id] = abuse_text
             updated_field_names.append("Abuse cases")
 
         # Populate "Security requirements" custom field
         if req_field_id and requirements:
+            if req_field_id not in available_fields:
+                logger.warning("Field %s exists but is not editable for issue %s", req_field_id, issue_key)
+
             field_meta = available_fields.get(req_field_id, {})
             field_schema = field_meta.get("schema", {})
             field_type = field_schema.get("type", "string")
+            logger.info("Security requirements field type: %s, schema: %s", field_type, field_schema)
 
             req_text = self._build_security_requirements_text(requirements)
 
-            if field_type in ("string", "array"):
-                # Plain text or text area field
-                fields_to_update[req_field_id] = req_text
-            else:
-                # Try ADF format for rich text
-                adf_content = self._build_adf_content([
-                    {"type": "paragraph", "text": req_text}
-                ])
-                fields_to_update[req_field_id] = adf_content
-
+            # Always try plain text first - it's most universally accepted
+            fields_to_update[req_field_id] = req_text
             updated_field_names.append("Security requirements")
 
         if not fields_to_update:
-            error_msg = "No custom fields found to update. Please ensure 'Abuse cases' and 'Security requirements' custom fields exist in your Jira project."
+            if missing_fields:
+                error_msg = f"Custom fields not found in Jira: {', '.join(missing_fields)}. Please create these custom text fields in your Jira project settings: Project Settings > Fields > Custom Fields > Create Field (Text Area)."
+            else:
+                error_msg = "No analysis data to publish (no abuse cases or security requirements)."
             logger.error(error_msg)
             raise ValueError(error_msg)
 

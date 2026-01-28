@@ -232,8 +232,16 @@ async def publish_to_source(
                 message=f"Updated work item {story.external_id}: {abuse_count} abuse cases, {req_count} security requirements (Risk: {analysis_data['risk_score']})",
             )
     except ValueError as e:
-        # Custom field not found error
+        # Custom field not found or Jira API error with details
+        logger.warning("Publish to source failed with ValueError: %s", str(e))
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.exception("Failed to publish to source")
-        raise HTTPException(status_code=502, detail=f"Failed to publish to {story.source}: {e}")
+        error_msg = str(e)
+        logger.exception("Failed to publish to source: %s", error_msg)
+        # Provide more helpful error message
+        if "400" in error_msg:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Jira rejected the update. This usually means the custom fields 'Abuse cases' and 'Security requirements' don't exist or aren't editable. Please create them in Jira: Project Settings > Fields. Error: {error_msg}"
+            )
+        raise HTTPException(status_code=502, detail=f"Failed to publish to {story.source}: {error_msg}")
