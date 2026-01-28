@@ -157,3 +157,78 @@ async def export_to_servicenow(analysis_id: UUID, req: ServiceNowExportRequest, 
         return ExportResult(format="servicenow", items_exported=len(created), message=f"Created {len(created)} ServiceNow records")
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"ServiceNow API error: {e}")
+
+
+@router.post("/analyses/{analysis_id}/publish-to-source", response_model=ExportResult)
+async def publish_to_source(
+    analysis_id: UUID,
+    integration_id: UUID | None = None,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Publish analysis results as a comment to the original source issue (Jira/ADO).
+    Uses the story's external_id and either explicit integration_id or finds matching integration.
+    """
+    analysis, story = await _get_analysis_with_story(analysis_id, db)
+
+    if not story:
+        raise HTTPException(status_code=404, detail="Story not found")
+    if not story.external_id:
+        raise HTTPException(status_code=400, detail="Story has no external source (not imported from Jira/ADO)")
+    if story.source not in ("jira", "ado"):
+        raise HTTPException(status_code=400, detail=f"Publishing to {story.source} is not supported")
+
+    # Find integration
+    if integration_id:
+        config, token = await _load_integration(integration_id, story.source, db)
+    else:
+        # Auto-find integration for this project and source type
+        result = await db.execute(
+            select(Integration).where(
+                Integration.project_id == story.project_id,
+                Integration.integration_type == story.source,
+            ).limit(1)
+        )
+        integration = result.scalar_one_or_none()
+        if not integration:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No {story.source} integration found for this project. Please add one in Settings."
+            )
+        config = integration.config
+        token = decrypt_token(integration.encrypted_token)
+
+    analysis_data = {
+        "risk_score": analysis.risk_score,
+        "abuse_cases": analysis.abuse_cases,
+        "security_requirements": analysis.security_requirements,
+        "stride_threats": analysis.stride_threats,
+    }
+
+    try:
+        if story.source == "jira":
+            jira_url = config.get("url", "")
+            email = config.get("email", "")
+            client = JiraClient(jira_url, email, token)
+            await client.publish_analysis_to_issue(story.external_id, analysis_data)
+            return ExportResult(
+                format="jira",
+                items_exported=1,
+                message=f"Published analysis to Jira issue {story.external_id}",
+            )
+        elif story.source == "ado":
+            org_url = config.get("url", "")
+            project = config.get("project", "")
+            client = ADOClient(org_url, project, token)
+            # ADO external_id is typically the work item ID number
+            work_item_id = int(story.external_id)
+            await client.publish_analysis_to_work_item(work_item_id, analysis_data)
+            return ExportResult(
+                format="ado",
+                items_exported=1,
+                message=f"Published analysis to ADO work item {story.external_id}",
+            )
+    except Exception as e:
+        logger.exception("Failed to publish to source")
+        raise HTTPException(status_code=502, detail=f"Failed to publish to {story.source}: {e}")

@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../api/client'
 import { riskColor, priorityColor } from '../lib/utils'
-import { ArrowLeft, Play, Download, Send, FileSpreadsheet, FileText, FileDown, Loader2 } from 'lucide-react'
+import { ArrowLeft, Play, Download, Send, FileSpreadsheet, FileText, FileDown, Loader2, Upload, ExternalLink } from 'lucide-react'
 
 export default function StoryAnalysisPage() {
   const { projectId, storyId } = useParams<{ projectId: string; storyId: string }>()
@@ -100,6 +100,23 @@ export default function StoryAnalysisPage() {
 
   const filteredIntegrations = showPush ? integrations.filter((i: any) => i.integration_type === showPush) : []
 
+  // Check if story can be published back to source
+  const canPublishToSource = story?.external_id && (story?.source === 'jira' || story?.source === 'ado')
+  const sourceLabel = story?.source === 'jira' ? 'Jira' : story?.source === 'ado' ? 'Azure DevOps' : story?.source
+
+  const handlePublishToSource = async () => {
+    if (!latestAnalysisId || !canPublishToSource) return
+    setExportLoading('publish')
+    try {
+      const resp = await api.post(`/analyses/${latestAnalysisId}/publish-to-source`)
+      alert(resp.data.message)
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Failed to publish to source')
+    } finally {
+      setExportLoading('')
+    }
+  }
+
   const risk = analysis ? riskColor(analysis.risk_score) : null
 
   return (
@@ -114,7 +131,20 @@ export default function StoryAnalysisPage() {
       <div className="bg-white/5 border border-white/10 rounded-2xl p-6 mb-6">
         <div className="flex items-start justify-between">
           <div className="flex-1">
-            <h1 className="text-xl font-bold text-white mb-2">{story?.title}</h1>
+            <div className="flex items-center gap-3 mb-2">
+              <h1 className="text-xl font-bold text-white">{story?.title}</h1>
+              {story?.external_id && (
+                <a
+                  href={story.external_url || '#'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 px-2 py-1 bg-blue-500/20 border border-blue-500/30 rounded text-xs text-blue-300 hover:bg-blue-500/30"
+                >
+                  {story.source === 'jira' ? '🔷' : '🔶'} {story.external_id}
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+            </div>
             <p className="text-gray-400 text-sm">{story?.description}</p>
             {story?.acceptance_criteria && <p className="text-gray-500 text-xs mt-2">Acceptance: {story.acceptance_criteria}</p>}
           </div>
@@ -233,6 +263,35 @@ export default function StoryAnalysisPage() {
               </div>
             )}
           </div>
+
+          {/* Publish to Source - shown prominently if story was imported */}
+          {canPublishToSource && (
+            <div className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/30 rounded-xl p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold text-white flex items-center gap-2">
+                    <Upload className="w-5 h-5 text-green-400" />
+                    Publish Results to {sourceLabel}
+                  </h3>
+                  <p className="text-sm text-gray-400 mt-1">
+                    Post analysis results as a comment on {story?.external_id}
+                  </p>
+                </div>
+                <button
+                  onClick={handlePublishToSource}
+                  disabled={exportLoading === 'publish'}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-xl font-medium"
+                >
+                  {exportLoading === 'publish' ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Upload className="w-4 h-4" />
+                  )}
+                  {exportLoading === 'publish' ? 'Publishing...' : `Publish to ${sourceLabel}`}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Export & Push */}
           <div className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/20 rounded-xl p-4">
