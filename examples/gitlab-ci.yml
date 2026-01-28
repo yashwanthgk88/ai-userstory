@@ -1,0 +1,51 @@
+# .gitlab-ci.yml - SecureReq AI Security Gate
+#
+# Required CI/CD variables (Settings > CI/CD > Variables):
+#   SECUREREQ_API_KEY - API key (masked)
+#   SECUREREQ_PROJECT_ID - Project ID to analyze
+#   RISK_THRESHOLD - Max risk score (default: 70)
+
+stages:
+  - security
+
+security-gate:
+  stage: security
+  image: python:3.12-slim
+  variables:
+    SECUREREQ_API_URL: "https://ai-userstory-production.up.railway.app/api"
+    RISK_THRESHOLD: "70"
+  script:
+    - apt-get update -qq && apt-get install -y -qq curl > /dev/null
+    - |
+      echo "=== SecureReq AI Security Gate ==="
+      RESPONSE=$(curl -sf -X POST \
+        "${SECUREREQ_API_URL}/projects/${SECUREREQ_PROJECT_ID}/analyze" \
+        -H "X-API-Key: ${SECUREREQ_API_KEY}" \
+        -H "Content-Type: application/json")
+
+      python3 -c "
+      import sys, json
+      data = json.loads('''${RESPONSE}''')
+      threshold = int('${RISK_THRESHOLD}')
+      failed = 0
+      for r in data['results']:
+          risk = r.get('risk_score', 0)
+          if r['status'] == 'error':
+              print(f'  ✗ {r[\"story_title\"]}: ERROR - {r.get(\"error\", \"unknown\")}')
+              failed += 1
+          elif risk >= threshold:
+              print(f'  ✗ {r[\"story_title\"]}: RISK {risk} (threshold: {threshold})')
+              failed += 1
+          else:
+              print(f'  ✓ {r[\"story_title\"]}: RISK {risk} - OK')
+      print(f'\nTotal: {data[\"total\"]} stories | Threshold: {threshold}')
+      if failed:
+          print(f'FAILED: {failed} stories exceeded threshold')
+          sys.exit(1)
+      else:
+          print('PASSED: All stories within risk threshold')
+      "
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+  allow_failure: false

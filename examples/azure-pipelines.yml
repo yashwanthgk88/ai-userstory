@@ -1,0 +1,63 @@
+# azure-pipelines.yml
+# SecureReq AI Security Gate for Azure DevOps Pipelines
+#
+# Required pipeline variables:
+#   SECUREREQ_API_KEY  - API key (set as secret)
+#   SECUREREQ_PROJECT_ID - Project ID to analyze
+#   RISK_THRESHOLD - Max risk score (default: 70)
+
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+
+pr:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+steps:
+  - task: Bash@3
+    displayName: 'SecureReq AI Security Gate'
+    inputs:
+      targetType: 'inline'
+      script: |
+        echo "=== SecureReq AI Security Gate ==="
+
+        RESPONSE=$(curl -sf -X POST \
+          "https://ai-userstory-production.up.railway.app/api/projects/${SECUREREQ_PROJECT_ID}/analyze" \
+          -H "X-API-Key: ${SECUREREQ_API_KEY}" \
+          -H "Content-Type: application/json")
+
+        THRESHOLD="${RISK_THRESHOLD:-70}"
+
+        python3 -c "
+        import sys, json
+        data = json.loads('''${RESPONSE}''')
+        threshold = ${THRESHOLD}
+        failed = 0
+        for r in data['results']:
+            risk = r.get('risk_score', 0)
+            if r['status'] == 'error':
+                print(f'##vso[task.logissue type=error]{r[\"story_title\"]}: Analysis failed')
+                failed += 1
+            elif risk >= threshold:
+                print(f'##vso[task.logissue type=error]{r[\"story_title\"]}: Risk {risk} exceeds threshold {threshold}')
+                failed += 1
+            else:
+                print(f'  ✓ {r[\"story_title\"]}: Risk {risk} - OK')
+        print(f'\nTotal: {data[\"total\"]} stories analyzed')
+        if failed:
+            print(f'##vso[task.complete result=Failed;]{failed} stories exceeded risk threshold')
+            sys.exit(1)
+        else:
+            print('All stories passed security gate')
+        "
+    env:
+      SECUREREQ_API_KEY: $(SECUREREQ_API_KEY)
+      SECUREREQ_PROJECT_ID: $(SECUREREQ_PROJECT_ID)
+      RISK_THRESHOLD: $(RISK_THRESHOLD)

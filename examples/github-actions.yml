@@ -1,0 +1,76 @@
+# .github/workflows/security-gate.yml
+# SecureReq AI Security Gate for GitHub Actions
+#
+# Required secrets:
+#   SECUREREQ_API_KEY  - API key from SecureReq AI Settings
+#   SECUREREQ_PROJECT_ID - Project ID to analyze
+#
+# Optional variables:
+#   RISK_THRESHOLD - Max acceptable risk score (default: 70)
+
+name: Security Gate
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main]
+
+jobs:
+  security-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run SecureReq AI Analysis
+        id: analyze
+        env:
+          SECUREREQ_API_KEY: ${{ secrets.SECUREREQ_API_KEY }}
+          SECUREREQ_API_URL: https://ai-userstory-production.up.railway.app/api
+          PROJECT_ID: ${{ secrets.SECUREREQ_PROJECT_ID }}
+          RISK_THRESHOLD: ${{ vars.RISK_THRESHOLD || '70' }}
+        run: |
+          RESPONSE=$(curl -sf -X POST \
+            "${SECUREREQ_API_URL}/projects/${PROJECT_ID}/analyze" \
+            -H "X-API-Key: ${SECUREREQ_API_KEY}" \
+            -H "Content-Type: application/json")
+
+          echo "## Security Analysis Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          python3 -c "
+          import sys, json, os
+          data = json.loads('${RESPONSE}'.replace(\"'\", \"\"))
+          threshold = int(os.environ['RISK_THRESHOLD'])
+          failed = 0
+          summary = open(os.environ['GITHUB_STEP_SUMMARY'], 'a')
+          summary.write('| Story | Risk Score | Status |\n')
+          summary.write('|-------|-----------|--------|\n')
+          for r in data['results']:
+              risk = r.get('risk_score', 0)
+              if r['status'] == 'error':
+                  summary.write(f\"| {r['story_title']} | ERROR | :x: |\n\")
+                  failed += 1
+              elif risk >= threshold:
+                  summary.write(f\"| {r['story_title']} | {risk} | :x: EXCEEDS THRESHOLD |\n\")
+                  failed += 1
+              else:
+                  summary.write(f\"| {r['story_title']} | {risk} | :white_check_mark: |\n\")
+          summary.write(f\"\n**Total: {data['total']} stories | Threshold: {threshold}**\n\")
+          summary.close()
+          if failed:
+              print(f'::error::{failed} stories exceeded risk threshold')
+              sys.exit(1)
+          "
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const summary = fs.readFileSync(process.env.GITHUB_STEP_SUMMARY, 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: summary,
+            });

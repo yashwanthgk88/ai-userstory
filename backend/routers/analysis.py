@@ -86,6 +86,17 @@ async def run_analysis(story_id: UUID, user: User = Depends(get_current_user), d
     analysis = await _analyze_single_story(story, db)
     await db.commit()
     await db.refresh(analysis)
+
+    # Fire webhooks
+    try:
+        from services.webhook_service import fire_webhooks
+        await fire_webhooks(story.project_id, "analysis.completed", {
+            "analysis_id": str(analysis.id), "story_id": str(story.id),
+            "risk_score": analysis.risk_score, "status": "success",
+        }, db)
+    except Exception as e:
+        logger.warning("Webhook delivery error: %s", e)
+
     return analysis
 
 
@@ -104,12 +115,22 @@ async def bulk_analyze(project_id: UUID, user: User = Depends(get_current_user),
     for story in stories:
         try:
             analysis = await _analyze_single_story(story, db)
-            results.append({"story_id": str(story.id), "story_title": story.title, "status": "success", "analysis_id": str(analysis.id)})
+            results.append({"story_id": str(story.id), "story_title": story.title, "status": "success", "analysis_id": str(analysis.id), "risk_score": analysis.risk_score})
         except Exception as e:
             logger.error("Bulk analyze failed for story %s: %s", story.id, e)
             results.append({"story_id": str(story.id), "story_title": story.title, "status": "error", "error": str(e)})
 
     await db.commit()
+
+    # Fire bulk webhook
+    try:
+        from services.webhook_service import fire_webhooks
+        await fire_webhooks(project_id, "bulk_analysis.completed", {
+            "project_id": str(project_id), "total": len(stories), "results": results,
+        }, db)
+    except Exception as e:
+        logger.warning("Webhook delivery error: %s", e)
+
     return {"total": len(stories), "results": results}
 
 

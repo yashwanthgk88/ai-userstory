@@ -1,0 +1,73 @@
+// Jenkinsfile - SecureReq AI Security Gate
+//
+// Required credentials:
+//   securereq-api-key - Secret text credential with API key
+//
+// Required parameters:
+//   SECUREREQ_PROJECT_ID - Project ID to analyze
+//   RISK_THRESHOLD - Max risk score (default: 70)
+
+pipeline {
+    agent any
+
+    parameters {
+        string(name: 'SECUREREQ_PROJECT_ID', description: 'SecureReq AI Project ID')
+        string(name: 'RISK_THRESHOLD', defaultValue: '70', description: 'Max acceptable risk score')
+    }
+
+    environment {
+        SECUREREQ_API_URL = 'https://ai-userstory-production.up.railway.app/api'
+    }
+
+    stages {
+        stage('Security Analysis') {
+            steps {
+                withCredentials([string(credentialsId: 'securereq-api-key', variable: 'SECUREREQ_API_KEY')]) {
+                    script {
+                        def response = sh(
+                            script: """
+                                curl -sf -X POST \
+                                    "${SECUREREQ_API_URL}/projects/${params.SECUREREQ_PROJECT_ID}/analyze" \
+                                    -H "X-API-Key: ${SECUREREQ_API_KEY}" \
+                                    -H "Content-Type: application/json"
+                            """,
+                            returnStdout: true
+                        ).trim()
+
+                        def result = readJSON text: response
+                        def failed = 0
+
+                        echo "=== SecureReq AI Security Gate ==="
+                        echo "Analyzed ${result.total} stories"
+
+                        result.results.each { r ->
+                            def risk = r.risk_score ?: 0
+                            if (r.status == 'error') {
+                                echo "✗ ${r.story_title}: ERROR"
+                                failed++
+                            } else if (risk >= params.RISK_THRESHOLD.toInteger()) {
+                                echo "✗ ${r.story_title}: Risk ${risk} exceeds threshold"
+                                failed++
+                            } else {
+                                echo "✓ ${r.story_title}: Risk ${risk} - OK"
+                            }
+                        }
+
+                        if (failed > 0) {
+                            error("${failed} stories exceeded risk threshold of ${params.RISK_THRESHOLD}")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        failure {
+            echo 'Security gate FAILED - review analysis results'
+        }
+        success {
+            echo 'Security gate PASSED - all stories within risk threshold'
+        }
+    }
+}
