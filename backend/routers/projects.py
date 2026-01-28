@@ -128,11 +128,13 @@ async def create_project_from_jira(
     await db.refresh(project)
 
     # Also create a project-level integration linked to this project
+    # Include project_key in config so sync can use it
+    project_config = {**integration.config, "project_key": req.jira_project_key}
     project_integration = Integration(
         project_id=project.id,
         integration_type="jira",
         name=f"Jira - {req.jira_project_key}",
-        config=integration.config,
+        config=project_config,
         encrypted_token=integration.encrypted_token,
         created_by=user.id,
     )
