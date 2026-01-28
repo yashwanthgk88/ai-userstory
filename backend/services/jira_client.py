@@ -80,13 +80,14 @@ class JiraClient:
         jql = f"project = {project_id} ORDER BY created DESC"
         logger.info("Fetching issues with JQL: %s", jql)
         async with httpx.AsyncClient(timeout=60) as client:
-            resp = await client.post(
-                f"{self.base_url}/rest/api/3/search",
+            # Use the new /rest/api/3/search/jql endpoint (old /search was deprecated Jan 2025)
+            resp = await client.get(
+                f"{self.base_url}/rest/api/3/search/jql",
                 headers=self.headers,
-                json={
+                params={
                     "jql": jql,
                     "maxResults": max_results,
-                    "fields": ["summary", "description", "issuetype", "status", "created", "updated"]
+                    "fields": "summary,description,issuetype,status,created,updated"
                 }
             )
             if resp.status_code >= 400:
