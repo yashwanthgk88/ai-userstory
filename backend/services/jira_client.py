@@ -76,9 +76,9 @@ class JiraClient:
 
     async def get_project_issues(self, project_key: str, max_results: int = 100) -> list[dict]:
         """Get all issues (user stories) from a Jira project."""
-        # Search for issues in the project - quote the key to handle reserved words/spaces
-        # Use single quotes inside JQL for the value (Jira JQL syntax)
-        jql = f"project = '{project_key}' ORDER BY created DESC"
+        # Search for issues in the project - use double quotes to handle reserved words like AND, OR, NOT
+        # Jira JQL requires double quotes for reserved word escaping
+        jql = f'project = "{project_key}" ORDER BY created DESC'
         logger.info("Fetching issues with JQL: %s", jql)
         async with httpx.AsyncClient(timeout=60) as client:
             resp = await client.post(
