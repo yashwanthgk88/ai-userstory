@@ -98,9 +98,10 @@ export default function DashboardPage() {
     if (!jiraIntegration) return
     setImportingProject(project.key)
     try {
-      // Create space with Jira project info
+      // Create space with Jira project info (use project ID in JQL to avoid reserved word issues)
       const response = await api.post('/projects/from-jira', {
         integration_id: jiraIntegration.id,
+        jira_project_id: project.id,
         jira_project_key: project.key,
         jira_project_name: project.name,
       })

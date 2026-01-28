@@ -145,7 +145,7 @@ async def create_project_from_jira(
     client = JiraClient(config.get("url", ""), config.get("email", ""), token)
 
     try:
-        issues = await client.get_project_issues(req.jira_project_key)
+        issues = await client.get_project_issues(req.jira_project_id)
         imported_count = 0
         for issue in issues:
             fields = issue.get("fields", {})

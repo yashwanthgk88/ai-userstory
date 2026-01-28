@@ -30,5 +30,6 @@ class ProjectResponse(BaseModel):
 class JiraProjectImport(BaseModel):
     """Request to create a space from a Jira project."""
     integration_id: UUID
+    jira_project_id: str  # Numeric ID for JQL queries (avoids reserved word issues)
     jira_project_key: str
     jira_project_name: str
